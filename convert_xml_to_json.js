@@ -4,7 +4,7 @@ import { XMLParser, XMLValidator } from 'fast-xml-parser';
 const fields = [
   'title', 'brand', 'condition', 'description', 'id', 'image_link', 'link',
   'ean', 'mpn', 'price', 'sale_price', 'product_type', 'weight',
-  'shipping_weight', 'availability', 'pickup_SLA', 'shipping',
+  'shipping_weight', 'availability', 'pickup_SLA', 'tax_rate', 'shipping',
 ];
 const shippingFields = ['country', 'service', 'price'];
 
@@ -46,6 +46,12 @@ async function main() {
   const itemCount = products.length;
   for (const product of products) {
     completeFields(product, fields, `item ${product.id ?? '(id assente)'}`);
+    product.tax_rate = '22';
+    product.mpn = product.id;
+    if (typeof product.title === 'string' && typeof product.brand === 'string' && product.brand.trim() !== '') {
+      const suffix = ` - ${product.brand}`;
+      if (!product.title.endsWith(suffix)) product.title += suffix;
+    }
     if (product.shipping !== null) {
       completeFields(product.shipping, shippingFields, `shipping di ${product.id}`);
     }
