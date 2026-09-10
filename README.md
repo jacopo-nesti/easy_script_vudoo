@@ -1,31 +1,116 @@
-# GUIDA dave
+# Vudoo → Base.com Product Importer
 
-## Copia cartella progetto su desktop
+Script Node.js per automatizzare l'importazione dei cataloghi prodotto da **Vudoo** verso **Base.com**.
 
-## Installa node.js e npm
+Il progetto nasce per semplificare un processo che altrimenti richiederebbe la gestione e l'inserimento manuale dei dati prodotto.
 
-## Apri il progetto con VS code
+## Flusso attuale
 
-## Scarica file catalogo prodotti in formato google (formato .xml) da panel vudoo
+```text
+Panel Vudoo
+    ↓
+Download catalogo Google XML
+    ↓
+convert_xml_to_json.js
+    ↓
+real_products.json
+    ↓
+Normalizzazione dati
+    ↓
+Controllo SKU / duplicati
+    ↓
+Creazione payload
+    ↓
+API Base.com
+    ↓
+Catalogo Base.com
+```
 
-## Salva il file .xml dentro la cartella del progetto
+## Funzionalità
 
-## Apri file "convert_xml_to_json.js",  cerca la riga 26: const xml = await readFile(new URL('./QUA INSERISCI IL NOME DEL FILE.xml
+Attualmente lo script permette di:
 
-## Dal terminale di vs code scrivi "node convert_xml_to_json.js" e verifica che lo script abbia generato un file chiamato real_products.json
+- convertire il catalogo XML Vudoo in JSON;
+- normalizzare i dati dei prodotti;
+- associare ID e SKU;
+- preparare prezzi, peso, EAN, descrizioni e immagini;
+- selezionare l'inventory Base.com di destinazione;
+- recuperare automaticamente il gruppo prezzi;
+- controllare se uno SKU è già presente;
+- evitare la creazione di prodotti duplicati;
+- testare un solo prodotto tramite `TEST_MODE`;
+- simulare l'importazione senza scrivere su Base.com tramite `DRY_RUN`;
+- importare automaticamente i prodotti tramite API Base.com;
+- continuare l'elaborazione anche in caso di errore su un singolo prodotto.
 
-## Apri il file .env, se necessario cambia il BASE_INVENTORY_ID con l'id dell'inventario su base.com oppure utilizza "115966" per l'inventario di test
+## Modalità
 
-## Sempre dentro il file .env, assicurati che TEST_MODE=true e DRY_RUN=false
+```env
+TEST_MODE=true
+```
 
-## Dal terminale di vs code scrivi "npm start", nell'output del terminale dovresti vedere: 
-- Prodotti letti: "numero di prodotti presenti nel catalogo usato"
-- Prodotti selezionati: 1
-- Prodotti processati: 1
-- Importati: 1
-- Simulati: 0
-- Errori: 0
+Processa solamente un prodotto.
 
-## Se segna prodotti importati: 1, torna sul file .env e assicurati che TEST_MODE=false e DRY_RUN=false
+```env
+DRY_RUN=true
+```
 
-## Dal terminale di vs code scrivi "npm start" per lanciare lo script --> in questo modo verranno trasferiti i prodotti dal tuo catalogo a base.com
+Esegue i controlli e genera il payload senza creare prodotti su Base.com.
+
+Per l'importazione completa:
+
+```env
+TEST_MODE=false
+DRY_RUN=false
+```
+
+## Avvio
+
+Conversione del catalogo:
+
+```bash
+npm run convert
+```
+
+Avvio dello script:
+
+```bash
+npm start
+```
+
+Per la procedura completa di configurazione e utilizzo consultare:
+
+**Per la procedura completa di configurazione e utilizzo consulta [guida.md](./guida.md).**
+
+## Evoluzione prevista
+
+Lo sviluppo futuro potrà includere:
+
+```text
+Vudoo API
+    ↓
+GET prodotti
+    ↓
+Normalizzazione
+    ↓
+CREATE / UPDATE / SKIP
+    ↓
+Base.com
+```
+
+In particolare:
+
+- collegamento diretto alle API Vudoo;
+- eliminazione del download XML manuale;
+- aggiornamento automatico dei prodotti già esistenti;
+- creazione automatica di categorie;
+- creazione automatica dei produttori;
+- sincronizzazione di prezzi e stock.
+
+L'obiettivo finale è trasformare lo script in un piccolo **connettore automatico Vudoo → Base.com**.
+
+## Progetto
+
+**Ideazione, progettazione del flusso, coordinamento e sviluppo:** Jacopo Nesti
+
+Sviluppato durante il periodo di stage con il supporto del team.

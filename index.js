@@ -6,7 +6,6 @@ const warehouseId = process.env.BASE_WAREHOUSE_ID?.trim();
 const testMode = process.env.TEST_MODE ?? 'true';
 const dryRun = process.env.DRY_RUN ?? 'true';
 
-// Protegge anche i messaggi di errore eventualmente restituiti dall'API.
 function log(message) {
   const text = String(message);
   console.log(token ? text.replaceAll(token, '[TOKEN NASCOSTO]') : text);
@@ -59,23 +58,23 @@ async function getBasePriceGroup(inventory) {
   if (!Array.isArray(data.price_groups) || !Array.isArray(inventory.price_groups)) {
     throw new Error('Elenco gruppi prezzi non valido.');
   }
-  const groups = data.price_groups.filter(group =>
-    inventory.price_groups.some(id => String(id) === String(group.price_group_id))
+  const priceGroups = data.price_groups.filter(priceGroup =>
+    inventory.price_groups.some(id => String(id) === String(priceGroup.price_group_id))
   );
-  const defaults = groups.filter(group =>
+  const defaults = priceGroups.filter(priceGroup =>
     inventory.default_price_group != null
-      ? String(group.price_group_id) === String(inventory.default_price_group)
-      : group.is_default === true
+      ? String(priceGroup.price_group_id) === String(inventory.default_price_group)
+      : priceGroup.is_default === true
   );
   if (defaults.length !== 1) {
-    for (const group of groups) {
-      log(`Gruppo prezzi disponibile: ${group.name} (${group.currency}) - ID: ${group.price_group_id}`);
+    for (const priceGroup of priceGroups) {
+      log(`Gruppo prezzi disponibile: ${priceGroup.name} (${priceGroup.currency}) - ID: ${priceGroup.price_group_id}`);
     }
     throw new Error('Gruppo prezzi predefinito non identificabile. Indica quale usare; nessuna importazione eseguita.');
   }
-  const group = defaults[0];
-  log(`Gruppo prezzi predefinito: ${group.name} (${group.currency})\nprice_group_id: ${group.price_group_id}`);
-  return group;
+  const priceGroup = defaults[0];
+  log(`Gruppo prezzi predefinito: ${priceGroup.name} (${priceGroup.currency})\nprice_group_id: ${priceGroup.price_group_id}`);
+  return priceGroup;
 }
 
 async function getBaseWarehouse(inventory) {
@@ -83,25 +82,24 @@ async function getBaseWarehouse(inventory) {
   if (!Array.isArray(data.warehouses) || !Array.isArray(inventory.warehouses)) {
     throw new Error('Elenco magazzini non valido.');
   }
-  // addInventoryProduct permette di assegnare stock solo ai magazzini nativi Base.
   const warehouses = data.warehouses.filter(warehouse =>
     warehouse.warehouse_type === 'bl' &&
     inventory.warehouses.includes(`bl_${warehouse.warehouse_id}`)
   );
+  let warehouse;
   if (warehouseId) {
-    const warehouse = warehouses.find(item => `bl_${item.warehouse_id}` === warehouseId);
+    warehouse = warehouses.find(item => `bl_${item.warehouse_id}` === warehouseId);
     if (!warehouse) {
       throw new Error(`BASE_WAREHOUSE_ID=${warehouseId} non trovato tra i magazzini Base restituiti dall'API e associati al catalogo selezionato.`);
     }
-    return { name: warehouse.name, id: `bl_${warehouse.warehouse_id}` };
-  }
-  if (warehouses.length !== 1) {
+  } else if (warehouses.length !== 1) {
     for (const warehouse of warehouses) {
       log(`Magazzino utilizzabile: ${warehouse.name} - ID: bl_${warehouse.warehouse_id}`);
     }
     throw new Error('Serve un solo magazzino Base associato al catalogo per inviare le quantita. Se ce ne sono diversi, indica quello corretto.');
+  } else {
+    warehouse = warehouses[0];
   }
-  const warehouse = warehouses[0];
   return { name: warehouse.name, id: `bl_${warehouse.warehouse_id}` };
 }
 
@@ -130,12 +128,10 @@ function normalizeProduct(source) {
   if (!source || typeof source !== 'object' || Array.isArray(source)) {
     throw new Error('Il prodotto deve essere un oggetto JSON.');
   }
-  // Mantiene anche i campi sorgente che non hanno un mapping Base.com.
   const normalized = { ...source };
   for (const field of ['id', 'ean', 'mpn', 'title', 'brand', 'condition', 'description',
     'image_link', 'link', 'product_type', 'availability', 'pickup_SLA']) {
-    if (source[field] == null) continue;
-    if (typeof source[field] !== 'string') {
+    if (source[field] != null && typeof source[field] !== 'string') {
       throw new Error(`${field} deve essere una stringa.`);
     }
   }
@@ -154,7 +150,6 @@ function normalizeProduct(source) {
       normalized.shipping.price = parseFeedNumber(source.shipping.price, 'EUR', 'shipping.price');
     }
   }
-  // availability non e una quantita: usa quantity solo se presente e numerica.
   if (source.quantity != null &&
     (typeof source.quantity !== 'number' || !Number.isFinite(source.quantity) || source.quantity < 0)) {
     throw new Error('quantity deve essere un numero maggiore o uguale a zero.');
@@ -164,16 +159,15 @@ function normalizeProduct(source) {
 
 function buildBasePayload(product, config) {
   const payload = { inventory_id: config.inventory.inventory_id };
-  if (product.sku != null) payload.sku = product.sku;
-  if (product.ean != null) payload.ean = product.ean;
-  if (product.weight != null) payload.weight = product.weight;
+  for (const field of ['sku', 'ean', 'weight']) {
+    if (product[field] != null) payload[field] = product[field];
+  }
 
   const textFields = {};
   if (product.title != null) textFields.name = product.title;
   if (product.description != null) textFields.description = product.description;
   if (Object.keys(textFields).length > 0) payload.text_fields = textFields;
 
-  // Base riceve prezzi lordi nella valuta del gruppo selezionato; peso in kg.
   if (product.price != null) {
     if (config.priceGroup.currency !== 'EUR') {
       throw new Error('Il feed contiene prezzi EUR ma il gruppo prezzi Base.com ha una valuta diversa.');
@@ -190,8 +184,27 @@ function buildBasePayload(product, config) {
     }
     payload.images = { '0': `url:${product.image_link}` };
   }
-  // L'id sorgente non e un product_id Base: ometterlo crea un nuovo prodotto.
   return payload;
+}
+
+async function productExistsInBase(sku, inventoryId) {
+  if (typeof sku !== 'string' || sku.trim() === '') {
+    throw new Error('Controllo duplicati: SKU mancante o non valido.');
+  }
+  const data = await callBase('getInventoryProductsList', {
+    inventory_id: inventoryId,
+    filter_sku: sku,
+  });
+  if (!data.products || typeof data.products !== 'object') {
+    throw new Error('getInventoryProductsList: elenco prodotti non valido.');
+  }
+  for (const product of Object.values(data.products)) {
+    if (!product || typeof product.sku !== 'string') {
+      throw new Error('getInventoryProductsList: prodotto senza SKU valido nella risposta.');
+    }
+    if (product.sku === sku) return true;
+  }
+  return false;
 }
 
 async function sendProductToBase(product, config) {
@@ -216,6 +229,7 @@ async function main() {
   let read = 0;
   let processed = 0;
   let imported = 0;
+  let skipped = 0;
   let simulated = 0;
   let selectedCount = 0;
   let errors = 0;
@@ -257,15 +271,20 @@ async function main() {
         const product = normalizeProduct(sourceProduct);
         log(`[DEBUG] Normalizzazione completata\nProdotto normalizzato:\n${JSON.stringify(product, null, 2)}`);
         log(`SKU: ${product.sku ?? '(assente)'}\nNome: ${product.title ?? '(assente)'}\nEAN: ${product.ean ?? '(assente)'}\nPrezzo: ${product.price ?? '(assente)'}\nPeso: ${product.weight ?? '(assente)'}\nImmagine: ${product.image_link ?? '(assente)'}`);
+        if (await productExistsInBase(product.sku, config.inventory.inventory_id)) {
+          skipped++;
+          log(`SKIPPED - SKU ${product.sku} già presente nel catalogo`);
+          continue;
+        }
         const result = await sendProductToBase(product, config);
-        if (result) {
-          imported++;
-          log(`SUCCESS - product_id: ${result.product_id}`);
-          if (result.warnings && Object.keys(result.warnings).length > 0) {
-            log(`Avvisi Base.com: ${JSON.stringify(result.warnings)}`);
-          }
-        } else {
+        if (!result) {
           simulated++;
+          continue;
+        }
+        imported++;
+        log(`SUCCESS - product_id: ${result.product_id}`);
+        if (result.warnings && Object.keys(result.warnings).length > 0) {
+          log(`Avvisi Base.com: ${JSON.stringify(result.warnings)}`);
         }
       } catch (error) {
         errors++;
@@ -276,10 +295,11 @@ async function main() {
     errors++;
     log(`ERROR ${stage}: ${error.message}`);
   } finally {
-    log(`\nInventory: ${config.inventory ? `${config.inventory.name} (${config.inventory.inventory_id})` : 'non selezionato'}`);
-    log(`Gruppo prezzi: ${config.priceGroup ? `${config.priceGroup.name} (${config.priceGroup.price_group_id}, ${config.priceGroup.currency})` : 'non selezionato'}`);
-    log(`Warehouse: ${config.warehouse ? `${config.warehouse.name} (${config.warehouse.id})` : warehouseStatus}`);
-    log(`Prodotti letti: ${read}\nProdotti selezionati: ${selectedCount}\nProdotti processati: ${processed}\nImportati: ${imported}\nSimulati: ${simulated}\nErrori: ${errors}`);
+    const { inventory, priceGroup, warehouse } = config;
+    log(`\nInventory: ${inventory ? `${inventory.name} (${inventory.inventory_id})` : 'non selezionato'}`);
+    log(`Gruppo prezzi: ${priceGroup ? `${priceGroup.name} (${priceGroup.price_group_id}, ${priceGroup.currency})` : 'non selezionato'}`);
+    log(`Warehouse: ${warehouse ? `${warehouse.name} (${warehouse.id})` : warehouseStatus}`);
+    log(`Prodotti letti: ${read}\nProdotti selezionati: ${selectedCount}\nProdotti processati: ${processed}\nImportati: ${imported}\nSaltati perché già presenti: ${skipped}\nSimulati: ${simulated}\nErrori: ${errors}`);
     if (errors > 0) process.exitCode = 1;
   }
 }
