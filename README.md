@@ -78,8 +78,6 @@ Avvio dello script:
 npm start
 ```
 
-Per la procedura completa di configurazione e utilizzo consultare:
-
 **Per la procedura completa di configurazione e utilizzo consulta [guida.md](./guida.md).**
 
 ## Evoluzione prevista
