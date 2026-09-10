@@ -1,0 +1,21 @@
+[
+  {
+    "id": 1,
+    "sku": "SKU001",
+    "ean": "8000000000001",
+    "name": "Prodotto esempio 1 - TEST",
+    "description": "Prodotto dimostrativo per il test di importazione.",
+    "price": 15.9,
+    "quantity": 10,
+    "weight": 1.5
+  },
+  {
+    "id": 2,
+    "sku": "SKU002",
+    "name": "Prodotto esempio 2 - TEST",
+    "description": "Secondo prodotto dimostrativo, senza EAN e immagine.",
+    "price": 8.5,
+    "quantity": 10,
+    "weight": 0.4
+  }
+]

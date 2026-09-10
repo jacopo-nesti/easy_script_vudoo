@@ -1,0 +1,15 @@
+{
+  "name": "products-to-base",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node --env-file=.env index.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "fast-xml-parser": "5.11.1"
+  }
+}
