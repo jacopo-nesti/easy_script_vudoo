@@ -1,8 +1,8 @@
 # Manuale operativo — Importazione catalogo Vudoo → Base.com
 
-Questo script permette di importare un catalogo prodotti da Vudoo a Base.com.
+Questo script permette di importare un catalogo prodotti da **Vudoo** a **Base.com**.
 
-Flusso attuale:
+## Flusso attuale
 
 ```text
 Catalogo Vudoo (.xml)
@@ -14,19 +14,23 @@ real_products.json
 index.js
         ↓
 API Base.com
+        ↓
+Catalogo Base.com
 ```
 
 ---
 
-## 1. Requisiti
+# 1. Requisiti
 
 Sul PC devono essere installati:
 
 ```text
-Node.js
+Node.js >= 22
 npm
 VS Code
 ```
+
+`npm` viene installato insieme a Node.js.
 
 Verifica dal terminale:
 
@@ -39,7 +43,7 @@ Se entrambi restituiscono una versione, puoi procedere.
 
 ---
 
-## 2. Apri il progetto
+# 2. Apri il progetto
 
 Apri la cartella del progetto con VS Code:
 
@@ -47,13 +51,195 @@ Apri la cartella del progetto con VS Code:
 File → Open Folder
 ```
 
-Poi apri il terminale integrato.
+Poi apri il terminale integrato:
+
+```text
+Terminal → New Terminal
+```
 
 ---
 
-# Preparazione catalogo
+# 3. Installa le dipendenze
 
-## 3. Scarica il catalogo da Vudoo
+La prima volta che utilizzi il progetto esegui:
+
+```bash
+npm install
+```
+
+Questo comando installa le dipendenze indicate nel `package.json`.
+
+Attualmente il progetto utilizza:
+
+```text
+fast-xml-parser
+```
+
+Non è necessario ripetere `npm install` a ogni avvio.
+
+Va rieseguito principalmente:
+
+- dopo aver clonato/coperto il progetto su un nuovo PC;
+- quando vengono aggiunte o modificate dipendenze.
+
+---
+
+# 4. Configura `.env`
+
+Nel progetto è presente:
+
+```text
+.env.example
+```
+
+Questo file contiene le variabili necessarie allo script, ma **non contiene credenziali reali**.
+
+Esempio:
+
+```env
+BASE_API_TOKEN=
+BASE_INVENTORY_ID=
+BASE_WAREHOUSE_ID=
+TEST_MODE=true
+DRY_RUN=true
+```
+
+Crea una copia di:
+
+```text
+.env.example
+```
+
+e rinominala:
+
+```text
+.env
+```
+
+Lo script utilizzerà il file `.env` locale.
+
+---
+
+## `BASE_API_TOKEN`
+
+Inserisci un token API Base.com valido:
+
+```env
+BASE_API_TOKEN=INSERISCI_TOKEN_BASE
+```
+
+Ogni collaboratore dovrebbe utilizzare, quando possibile, il proprio token API.
+
+```text
+Collaboratore A → proprio .env → proprio token
+Collaboratore B → proprio .env → proprio token
+Collaboratore C → proprio .env → proprio token
+```
+
+Il token:
+
+- non deve essere inserito nella repository;
+- non deve essere scritto in `.env.example`;
+- non deve essere condiviso dentro file versionati.
+
+Se un token viene accidentalmente pubblicato o inserito nella cronologia Git, deve essere sostituito/revocato.
+
+---
+
+## `BASE_INVENTORY_ID`
+
+Indica l'inventory Base.com nel quale verranno importati i prodotti.
+
+Esempio inventory Wally di test:
+
+```env
+BASE_INVENTORY_ID=115966
+```
+
+Lo script verifica tramite API che l'inventory esista e recupera automaticamente il gruppo prezzi associato.
+
+---
+
+## `BASE_WAREHOUSE_ID`
+
+Indica il warehouse Base.com da utilizzare quando è necessario gestire quantità di stock.
+
+```env
+BASE_WAREHOUSE_ID=
+```
+
+Se il catalogo non contiene quantità numeriche di stock, questa configurazione può non essere necessaria.
+
+---
+
+## `TEST_MODE`
+
+Decide **quanti prodotti vengono processati**.
+
+```env
+TEST_MODE=true
+```
+
+→ processa solamente il primo prodotto.
+
+```env
+TEST_MODE=false
+```
+
+→ processa tutti i prodotti.
+
+---
+
+## `DRY_RUN`
+
+Decide **se effettuare realmente modifiche su Base.com**.
+
+```env
+DRY_RUN=true
+```
+
+→ esegue controlli e genera il payload, ma **non crea prodotti**.
+
+```env
+DRY_RUN=false
+```
+
+→ esegue realmente le chiamate API e può creare prodotti su Base.com.
+
+---
+
+## Sicurezza `.env`
+
+Il file:
+
+```text
+.env
+```
+
+contiene dati sensibili e **non deve essere caricato su GitHub**.
+
+Nel `.gitignore` deve essere presente:
+
+```gitignore
+.env
+```
+
+Il file:
+
+```text
+.env.example
+```
+
+deve invece rimanere nella repository.
+
+```text
+.env.example → GitHub ✅
+.env         → GitHub ❌
+```
+
+---
+
+# 5. Scarica il catalogo da Vudoo
 
 Dal Panel Vudoo scarica il catalogo prodotti in formato:
 
@@ -67,11 +253,26 @@ Il file avrà estensione:
 .xml
 ```
 
-Copia il file XML nella cartella del progetto.
+Copia il file XML nella cartella principale del progetto.
+
+Esempio:
+
+```text
+products-to-base/
+│
+├── index.js
+├── convert_xml_to_json.js
+├── package.json
+├── .env
+├── .env.example
+└── Wally-1925-product-feed.xml
+```
+
+I file `.xml` sono esclusi dalla repository tramite `.gitignore`.
 
 ---
 
-## 4. Imposta il file XML da convertire
+# 6. Imposta il file XML da convertire
 
 Apri:
 
@@ -104,27 +305,27 @@ new URL('./Wally-1925-product-feed.xml', import.meta.url)
 
 ---
 
-# Conversione XML → JSON
+# 7. Converti XML → JSON
 
-## 5. Avvia la conversione
-
-Dal terminale:
+Dal terminale esegui:
 
 ```bash
 npm run convert
 ```
 
-Lo script genera:
+Lo script genera automaticamente:
 
 ```text
 real_products.json
 ```
 
-Questo è il file che verrà letto dallo script principale.
+Questo è il file utilizzato successivamente dallo script principale.
+
+`real_products.json` è generato localmente ed è escluso dalla repository tramite `.gitignore`.
 
 ---
 
-## 6. Controlla il JSON
+# 8. Controlla il JSON
 
 Verifica che:
 
@@ -136,9 +337,9 @@ sia stato creato correttamente.
 
 Durante la conversione vengono applicate automaticamente alcune regole.
 
-### SKU
+## SKU e MPN
 
-L'`id` XML viene utilizzato come SKU.
+L'`id` XML viene utilizzato come SKU e come MPN.
 
 Esempio:
 
@@ -146,13 +347,15 @@ Esempio:
 "id": "AZGXWGSS"
 ```
 
-e viene utilizzato anche come MPN:
+produce:
 
 ```json
 "mpn": "AZGXWGSS"
 ```
 
-### IVA
+---
+
+## IVA
 
 Ogni prodotto riceve:
 
@@ -160,7 +363,9 @@ Ogni prodotto riceve:
 "tax_rate": "22"
 ```
 
-### Titolo
+---
+
+## Titolo
 
 Il brand viene aggiunto automaticamente alla fine del titolo.
 
@@ -179,227 +384,42 @@ a:
 
 ---
 
-# Configurazione `.env`
+# 9. Primo test — Nessuna scrittura su Base.com
 
-## 7. Crea il file `.env`
-
-Nel progetto è presente:
-
-```text
-.env.example
-```
-
-Questo file contiene i nomi delle variabili necessarie allo script, ma **non contiene credenziali reali**.
-
-Il contenuto sarà simile a:
-
-```env
-BASE_API_TOKEN=
-BASE_INVENTORY_ID=
-BASE_WAREHOUSE_ID=
-TEST_MODE=true
-DRY_RUN=true
-```
-
-Crea una copia di:
-
-```text
-.env.example
-```
-
-e rinominala:
-
-```text
-.env
-```
-
-Il file `.env` sarà quindi quello utilizzato realmente dallo script.
-
----
-
-## 8. Configura `.env`
-
-Apri:
-
-```text
-.env
-```
-
-e inserisci i valori necessari.
-
-Esempio:
-
-```env
-BASE_API_TOKEN=INSERISCI_TOKEN_BASE
-BASE_INVENTORY_ID=115966
-BASE_WAREHOUSE_ID=
-TEST_MODE=true
-DRY_RUN=true
-```
-
-### `BASE_API_TOKEN`
-
-Token API utilizzato per comunicare con Base.com.
-
-```env
-BASE_API_TOKEN=INSERISCI_TOKEN_BASE
-```
-
-**Non condividere e non caricare il token su GitHub.**
-
----
-
-### Token API Base.com
-
-Ogni sviluppatore che utilizza lo script deve configurare nel proprio file `.env` un token API Base.com valido:
-
-```env
-BASE_API_TOKEN=INSERISCI_TOKEN_BASE
-```
-
-Il token non deve essere salvato nella repository e non deve essere condiviso dentro file versionati.
-
-Il file `.env` è escluso da Git tramite `.gitignore`.
-
-È consigliato che ogni collaboratore utilizzi il proprio token API personale, se possibile.
-
-In questo modo:
-
-```text
-Collaboratore A → proprio .env → proprio token
-Collaboratore B → proprio .env → proprio token
-Collaboratore C → proprio .env → proprio token
-```
-
-Se un token viene accidentalmente pubblicato, condiviso o salvato nella cronologia Git, deve essere considerato non più sicuro e va sostituito/revocato.
-
----
-
-### `BASE_INVENTORY_ID`
-
-ID dell'inventory Base.com nel quale devono essere importati i prodotti.
-
-```env
-BASE_INVENTORY_ID=115966
-```
-
-Per i test può essere utilizzato l'inventory Wally di test:
-
-```env
-BASE_INVENTORY_ID=115966
-```
-
-Lo script verifica l'inventory tramite API e recupera automaticamente il gruppo prezzi associato.
-
----
-
-### `BASE_WAREHOUSE_ID`
-
-Identifica il warehouse Base.com da utilizzare quando è necessario gestire quantità e stock.
-
-```env
-BASE_WAREHOUSE_ID=
-```
-
-Se il catalogo non contiene quantità numeriche di stock, questa configurazione può non essere necessaria.
-
----
-
-### `TEST_MODE`
-
-Decide quanti prodotti vengono processati.
-
-```env
-TEST_MODE=true
-```
-
-→ processa solamente il primo prodotto.
-
-```env
-TEST_MODE=false
-```
-
-→ processa tutti i prodotti.
-
----
-
-### `DRY_RUN`
-
-Decide se lo script deve scrivere realmente su Base.com.
-
-```env
-DRY_RUN=true
-```
-
-→ esegue i controlli e costruisce il payload, ma **non crea prodotti**.
-
-```env
-DRY_RUN=false
-```
-
-→ esegue realmente le chiamate API e può creare prodotti su Base.com.
-
----
-
-## Sicurezza `.env`
-
-Il file:
-
-```text
-.env
-```
-
-contiene dati sensibili e **non deve essere caricato su GitHub**.
-
-Nel `.gitignore` deve essere presente:
-
-```gitignore
-.env
-```
-
-Il file:
-
-```text
-.env.example
-```
-
-invece deve rimanere nella repository, perché permette agli altri sviluppatori di sapere quali variabili devono configurare.
-
-In breve:
-
-```text
-.env.example → GitHub ✅
-.env         → GitHub ❌
-```
-
----
-
-# Procedura consigliata
-
-## 9. Test senza scrivere su Base.com
-
-Imposta:
+Prima di effettuare un'importazione reale è consigliato utilizzare:
 
 ```env
 TEST_MODE=true
 DRY_RUN=true
 ```
 
-Poi:
+Avvia lo script:
 
 ```bash
 npm start
 ```
 
-Controlla che non ci siano errori.
+In questa configurazione:
 
-In questa modalità viene processato solamente un prodotto e non viene scritto nulla su Base.com.
+```text
+1 prodotto
+    ↓
+normalizzazione
+    ↓
+controllo SKU
+    ↓
+creazione payload
+    ↓
+NESSUNA scrittura su Base.com
+```
+
+Controlla che non vengano mostrati errori.
 
 ---
 
-## 10. Test con un prodotto reale
+# 10. Secondo test — Importazione di un prodotto
 
-Se il test precedente è corretto:
+Se il test precedente è corretto, modifica `.env`:
 
 ```env
 TEST_MODE=true
@@ -412,7 +432,9 @@ Poi:
 npm start
 ```
 
-Dovresti ottenere qualcosa di simile:
+In questo modo viene processato realmente un solo prodotto.
+
+Il riepilogo sarà simile a:
 
 ```text
 Prodotti letti: 157
@@ -423,9 +445,9 @@ Simulati: 0
 Errori: 0
 ```
 
-Il numero dei prodotti letti dipende dal catalogo utilizzato.
+Il numero di prodotti letti varia in base al catalogo.
 
-Controlla poi il prodotto dentro Base.com.
+Dopo il test controlla il prodotto direttamente su Base.com.
 
 Verifica almeno:
 
@@ -441,24 +463,22 @@ Immagine
 
 ---
 
-# Importazione completa
+# 11. Importazione completa
 
-## 11. Importa tutto il catalogo
-
-Quando il test è corretto:
+Quando il test sul singolo prodotto è corretto, modifica `.env`:
 
 ```env
 TEST_MODE=false
 DRY_RUN=false
 ```
 
-Poi:
+Poi esegui:
 
 ```bash
 npm start
 ```
 
-Lo script elaborerà tutti i prodotti presenti in:
+Lo script processerà tutti i prodotti presenti in:
 
 ```text
 real_products.json
@@ -468,7 +488,21 @@ real_products.json
 
 # Controllo duplicati
 
-Prima di creare un prodotto, lo script controlla se lo SKU è già presente nell'inventory selezionato.
+Prima di creare un prodotto, lo script controlla se lo stesso SKU è già presente nell'inventory Base.com selezionato.
+
+Flusso:
+
+```text
+Prodotto
+    ↓
+SKU
+    ↓
+Ricerca su Base.com
+    ↓
+SKU presente?
+├── SÌ → SKIPPED
+└── NO → IMPORT
+```
 
 Se lo SKU esiste:
 
@@ -478,76 +512,64 @@ SKIPPED
 
 Il prodotto non viene creato nuovamente.
 
-Se lo SKU non esiste:
+Se lo SKU non esiste, viene effettuata normalmente l'importazione.
 
-```text
-SUCCESS
-```
-
-il prodotto viene importato.
-
-Questo permette di rilanciare lo script senza creare duplicati dello stesso SKU.
-
-Il controllo viene effettuato solamente all'interno dell'inventory specificato in:
+Il controllo viene effettuato esclusivamente nell'inventory specificato in:
 
 ```env
 BASE_INVENTORY_ID=
 ```
 
+Questo permette di rilanciare lo script senza creare duplicati dello stesso SKU.
+
 ---
 
-# Stati possibili
+# Stati principali
 
-```text
-SUCCESS
-```
+## `SUCCESS`
 
-Prodotto creato correttamente.
+Il prodotto è stato creato correttamente su Base.com.
 
-```text
-SKIPPED
-```
+## `SKIPPED`
 
-Prodotto già presente nell'inventory.
+Il prodotto possiede uno SKU già presente nell'inventory selezionato.
 
-```text
-ERROR
-```
+## `ERROR`
 
-Errore durante elaborazione o invio.
+Si è verificato un errore durante elaborazione, controllo o invio.
 
-```text
-DRY_RUN
-```
+L'errore di un singolo prodotto non blocca necessariamente l'elaborazione degli altri.
 
-Prodotto controllato ma non inviato.
+## `DRY_RUN`
+
+Il prodotto è stato controllato e il payload è stato generato, ma non è stato inviato a Base.com.
 
 ---
 
 # Configurazioni rapide
 
-### Controlla 1 prodotto senza importare
+## Controlla 1 prodotto senza importare
 
 ```env
 TEST_MODE=true
 DRY_RUN=true
 ```
 
-### Importa 1 prodotto
+## Importa realmente 1 prodotto
 
 ```env
 TEST_MODE=true
 DRY_RUN=false
 ```
 
-### Controlla tutto il catalogo senza importare
+## Controlla tutto il catalogo senza importare
 
 ```env
 TEST_MODE=false
 DRY_RUN=true
 ```
 
-### Importa tutto il catalogo
+## Importa realmente tutto il catalogo
 
 ```env
 TEST_MODE=false
@@ -558,25 +580,31 @@ DRY_RUN=false
 
 # Comandi principali
 
-Convertire XML in JSON:
+## Installazione dipendenze
+
+```bash
+npm install
+```
+
+## Conversione XML → JSON
 
 ```bash
 npm run convert
 ```
 
-Avviare lo script principale:
+## Avvio importazione
 
 ```bash
 npm start
 ```
 
-Controllare Node:
+## Versione Node.js
 
 ```bash
 node -v
 ```
 
-Controllare npm:
+## Versione npm
 
 ```bash
 npm -v
@@ -584,106 +612,44 @@ npm -v
 
 ---
 
-# Upgrade futuri
+# Procedura rapida completa
 
-## Connessione diretta alle API Vudoo
-
-Eliminare il passaggio manuale:
+Per un nuovo utilizzo del progetto:
 
 ```text
-XML
-↓
-JSON
-```
-
-e utilizzare:
-
-```text
-Vudoo API
-↓
-GET
-↓
-JSON
-↓
-script
-↓
-Base.com
-```
-
----
-
-## Aggiornamento prodotti
-
-Attualmente:
-
-```text
-SKU presente
-→ SKIPPED
-```
-
-In futuro:
-
-```text
-SKU presente
-↓
-confronto dati
-↓
-dati uguali → SKIPPED
-dati diversi → UPDATE
+1. Apri il progetto
+        ↓
+2. npm install
+        ↓
+3. Copia .env.example → .env
+        ↓
+4. Configura token e inventory
+        ↓
+5. Scarica XML da Vudoo
+        ↓
+6. Imposta il nome XML nel convertitore
+        ↓
+7. npm run convert
+        ↓
+8. TEST_MODE=true + DRY_RUN=true
+        ↓
+9. npm start
+        ↓
+10. TEST_MODE=true + DRY_RUN=false
+        ↓
+11. npm start
+        ↓
+12. Controlla il prodotto su Base.com
+        ↓
+13. TEST_MODE=false + DRY_RUN=false
+        ↓
+14. npm start
 ```
 
 ---
 
-## Creazione automatica categorie
+# Sviluppi futuri
 
-Utilizzare:
+Gli sviluppi, le funzionalità pianificate e gli obiettivi futuri del progetto sono raccolti in:
 
-```text
-product_type
-```
-
-per verificare o creare automaticamente le categorie Base.com.
-
----
-
-## Creazione automatica produttori
-
-Utilizzare:
-
-```text
-brand
-```
-
-per verificare o creare automaticamente il produttore su Base.com.
-
----
-
-## Sincronizzazione stock
-
-Quando saranno disponibili quantità reali tramite Vudoo:
-
-```text
-Stock Vudoo
-↓
-script
-↓
-Warehouse Base.com
-```
-
----
-
-## Obiettivo finale
-
-```text
-Database Vudoo
-      ↓
-API Vudoo
-      ↓
-script Node.js
-      ↓
-CREATE / UPDATE / SKIP
-      ↓
-Base.com
-```
-
-In questo modo il processo potrà diventare completamente automatico, senza download e conversione manuale dei file XML.
+[`ROADMAP.md`](./ROADMAP.md)
