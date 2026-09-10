@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node --env-file=.env index.js"
+    "start": "node --env-file=.env index.js",
+    "convert": "node convert_xml_to_json.js"
   },
   "engines": {
     "node": ">=22"
