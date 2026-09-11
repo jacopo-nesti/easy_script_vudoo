@@ -193,10 +193,16 @@ async function findProductInBase(sku, inventoryId) {
   if (typeof sku !== 'string' || sku.trim() === '') {
     throw new Error('Ricerca prodotto: SKU mancante o non valido.');
   }
+
+  log(`[DEBUG API] Ricerca SKU "${sku}" nell'Inventory ID: ${inventoryId}`);
+
   const data = await callBase('getInventoryProductsList', {
     inventory_id: inventoryId,
     filter_sku: sku,
   });
+
+  log(`[DEBUG API] Risposta getInventoryProductsList ricevuta per SKU ${sku}: ${JSON.stringify(data.products)}`);
+
   if (!data.products || typeof data.products !== 'object') {
     throw new Error('getInventoryProductsList: elenco prodotti non valido.');
   }
