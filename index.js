@@ -274,6 +274,20 @@ function hasProductChanged(newProduct, existingData) {
   return false; // Nessuna differenza rilevata, l'aggiornamento non è necessario
 }
 
+// Aggiunta funzione per aggiornare un prodotto esistente su Base.com
+// Invia il payload includendo il product_id per effettuare l'aggiornamento dei dati modificati.
+async function updateProductInBase(productId, product, config) {
+  const payload = buildBasePayload(product, config);
+  payload.product_id = productId; // Viene specificato l'ID del prodotto esistente per aggiornarlo
+
+  if (dryRun === 'true') {
+    log(`Payload Base.com (Aggiornamento Prodotto ID ${productId}):\n${JSON.stringify(payload, null, 2)}`);
+    log('DRY_RUN: nessuna modifica reale su Base.com');
+    return null;
+  }
+  return await callBase('addInventoryProduct', payload);
+}
+
 async function sendProductToBase(product, config) {
   const payload = buildBasePayload(product, config);
   if (dryRun === 'true') {
