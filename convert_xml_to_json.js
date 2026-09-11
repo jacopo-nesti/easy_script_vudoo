@@ -23,7 +23,7 @@ function completeFields(object, expected, label) {
 }
 
 async function main() {
-  const xml = await readFile(new URL('Fisio-Cosmetics-product-feed (1).xml', import.meta.url), 'utf8');
+  const xml = await readFile(new URL('VUDOO.xml', import.meta.url), 'utf8');
   const validation = XMLValidator.validate(xml);
   if (validation !== true) {
     throw new Error(`XML non valido: ${validation.err.msg} (riga ${validation.err.line})`);

@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "start": "node --env-file=.env index.js",
-    "convert": "node convert_xml_to_json.js"
+    "convert": "node convert_xml_to_json.js",
+    "produttore": "node productor.js"
   },
   "engines": {
     "node": ">=22"
