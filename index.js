@@ -200,12 +200,16 @@ async function findProductInBase(sku, inventoryId) {
   if (!data.products || typeof data.products !== 'object') {
     throw new Error('getInventoryProductsList: elenco prodotti non valido.');
   }
-  for (const product of Object.values(data.products)) {
-    if (!product || typeof product.sku !== 'string') {
-      throw new Error('getInventoryProductsList: prodotto senza SKU valido nella risposta.');
-    }
-    if (product.sku === sku) {
-      return product; // restituisce l'oggetto del prodotto Base.com
+  for (const [key, product] of Object.entries(data.products)) {
+    if (!product) continue;
+    // Verifichiamo lo SKU
+    const productSku = product.sku ?? product.ean; // fallback sicuro se serve
+    if (productSku === sku || String(key) === String(sku)) {
+      // Normalizziamo l'ID prendendolo sia che si chiami product_id, id, o usando la chiave dell'oggetto
+      return {
+        ...product,
+        product_id: product.product_id ?? product.id ?? key
+      };
     }
   }
   return null; // restituisce null se il prodotto non esiste
