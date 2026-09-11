@@ -224,7 +224,55 @@ async function getBaseProductDetails(inventoryId, productId) {
   return data.products[productId];
 }
 
+// aggiunta funzione per confrontare i dati tra Vudoo e Base.com
+// verifica se prezzo, titolo, descrizione, EAN, peso o immagini sono differenti.
+function hasProductChanged(newProduct, existingData) {
+  // 1. Confronto Titolo (in Base.com i campi testuali sono dentro text_fields.name o name a seconda della struttura API)
+  const existingTitle = existingData.text_fields?.name ?? existingData.name ?? '';
+  if (newProduct.title != null && String(newProduct.title) !== String(existingTitle)) {
+    return true;
+  }
 
+  // 2. Confronto Descrizione
+  const existingDesc = existingData.text_fields?.description ?? existingData.description ?? '';
+  if (newProduct.description != null && String(newProduct.description) !== String(existingDesc)) {
+    return true;
+  }
+
+  // 3. Confronto Prezzo (gestito nel gruppo prezzi predefinito)
+  if (newProduct.price != null) {
+    // I prezzi su Base.com sono solitamente dentro l'oggetto prices { [price_group_id]: valore }
+    const existingPrices = existingData.prices ?? {};
+    // Viene cercato il prezzo nel gruppo prezzi attivo
+    const existingPrice = Object.values(existingPrices)[0]; 
+    if (existingPrice != null && Number(existingPrice) !== Number(newProduct.price)) {
+      return true;
+    }
+  }
+
+  // 4. Confronto EAN
+  if (newProduct.ean != null && String(newProduct.ean) !== String(existingData.ean ?? '')) {
+    return true;
+  }
+
+  // 5. Confronto Peso
+  if (newProduct.weight != null && Number(newProduct.weight) !== Number(existingData.weight ?? 0)) {
+    return true;
+  }
+
+  // 6. Confronto Immagini (verifica se l'immagine principale è cambiata)
+  if (newProduct.image_link != null) {
+    const existingImages = existingData.images ?? {};
+    // Base.com restituisce le immagini come oggetto o array, viene verificata la prima (chiave '0' o valore)
+    const firstExistingImage = Object.values(existingImages)[0] ?? '';
+    const formattedNewImage = `url:${newProduct.image_link}`;
+    if (firstExistingImage !== formattedNewImage && !firstExistingImage.includes(newProduct.image_link)) {
+      return true;
+    }
+  }
+
+  return false; // Nessuna differenza rilevata, l'aggiornamento non è necessario
+}
 
 async function sendProductToBase(product, config) {
   const payload = buildBasePayload(product, config);
