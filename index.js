@@ -352,18 +352,38 @@ async function main() {
         const product = normalizeProduct(sourceProduct);
         log(`[DEBUG] Normalizzazione completata\nProdotto normalizzato:\n${JSON.stringify(product, null, 2)}`);
         log(`SKU: ${product.sku ?? '(assente)'}\nNome: ${product.title ?? '(assente)'}\nEAN: ${product.ean ?? '(assente)'}\nPrezzo: ${product.price ?? '(assente)'}\nPeso: ${product.weight ?? '(assente)'}\nImmagine: ${product.image_link ?? '(assente)'}`);
-        if (await productExistsInBase(product.sku, config.inventory.inventory_id)) {
-          skipped++;
-          log(`SKIPPED - SKU ${product.sku} già presente nel catalogo`);
+        
+        // Gestione intelligente (Controllo esistenza -> Recupero dati -> Confronto -> Aggiornamento o Skip)
+        const existingProduct = await findProductInBase(product.sku, config.inventory.inventory_id);
+        if (existingProduct) {
+          // Il prodotto esiste: recuperiamo i dati attuali da Base.com per confrontarli
+          const existingDetails = await getBaseProductDetails(config.inventory.inventory_id, existingProduct.product_id);
+          
+          if (hasProductChanged(product, existingDetails)) {
+            log(`Rilevate modifiche per SKU ${product.sku}. Procedo con l'aggiornamento...`);
+            const result = await updateProductInBase(existingProduct.product_id, product, config);
+            if (!result) {
+              simulated++;
+              continue;
+            }
+            imported++; // Viene conteggiato l'aggiornamento come operazione completata con successo
+            log(`SUCCESS (Aggiornato) - product_id: ${existingProduct.product_id}`);
+          } else {
+            skipped++;
+            log(`SKIPPED - SKU ${product.sku} già presente e nessun dato modificato (nessun aggiornamento necessario)`);
+          }
           continue;
         }
+
+        // Se il prodotto non esiste, si procede alla creazione da capo
         const result = await sendProductToBase(product, config);
         if (!result) {
           simulated++;
           continue;
         }
         imported++;
-        log(`SUCCESS - product_id: ${result.product_id}`);
+        log(`SUCCESS (Creato) - product_id: ${result.product_id}`);
+
         if (result.warnings && Object.keys(result.warnings).length > 0) {
           log(`Avvisi Base.com: ${JSON.stringify(result.warnings)}`);
         }
