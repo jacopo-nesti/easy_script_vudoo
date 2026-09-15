@@ -129,10 +129,37 @@ function normalizeProduct(source) {
     throw new Error('Il prodotto deve essere un oggetto JSON.');
   }
   const normalized = { ...source };
+
+  // +++ NUOVO BLOCCO 1: Controllo severo campi obbligatori +++
+  if (!source.id || typeof source.id !== 'string' || source.id.trim() === '') {
+    throw new Error('Validazione fallita: SKU mancante.');
+  }
+  if (!source.title || typeof source.title !== 'string' || source.title.trim() === '') {
+    throw new Error('Validazione fallita: Titolo mancante.');
+  }
+  if (!source.price || typeof source.price !== 'string' || source.price.trim() === '') {
+    throw new Error('Validazione fallita: Prezzo mancante.');
+  }
+  // +++ FINE NUOVO BLOCCO 1 +++
+
   for (const field of ['id', 'ean', 'mpn', 'title', 'brand', 'condition', 'description',
     'image_link', 'link', 'product_type', 'availability', 'pickup_SLA']) {
     if (source[field] != null && typeof source[field] !== 'string') {
       throw new Error(`${field} deve essere una stringa.`);
+    }
+  }
+
+  // +++ NUOVO BLOCCO 2: Pulizia spazi EAN e check sintassi URL +++
+  if (source.ean != null) {
+    normalized.ean = source.ean.replace(/\s+/g, ''); // Rimuove gli spazi anomali
+    if (normalized.ean !== '' && !/^\d{8,14}$/.test(normalized.ean)) {
+      throw new Error(`Validazione fallita: EAN non valido (${source.ean}).`);
+    }
+  }
+  
+  if (source.image_link != null) {
+    if (!URL.canParse(source.image_link) || !['http:', 'https:'].includes(new URL(source.image_link).protocol)) {
+      throw new Error(`Validazione fallita: URL immagine non valido (${source.image_link}).`);
     }
   }
   if (source.id != null) normalized.sku = source.id;
