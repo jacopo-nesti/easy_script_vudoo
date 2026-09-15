@@ -4,6 +4,13 @@ Script Node.js per automatizzare l'importazione dei cataloghi prodotto da **Vudo
 
 Il progetto nasce per semplificare un processo che altrimenti richiederebbe la gestione e l'inserimento manuale dei dati prodotto.
 
+## Documentazione
+
+- [Guida operativa](docs/GUIDA.md)
+- [Roadmap](docs/ROADMAP.md)
+- [Workflow Git](docs/WORKFLOW.md)
+- [Commit Guidelines](docs/COMMIT_GUIDELINES.md)
+
 ## Flusso attuale
 
 ```text
@@ -78,7 +85,7 @@ Avvio dello script:
 npm start
 ```
 
-**Per la procedura completa di configurazione e utilizzo consulta [GUIDA.md](./GUIDA.md).**
+**Per la procedura completa di configurazione e utilizzo consulta [GUIDA.md](docs/GUIDA.md).**
 
 ## Evoluzione prevista
 
