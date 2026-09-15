@@ -210,8 +210,9 @@ async function findProductInBase(sku, inventoryId) {
     if (!product) continue;
     // Verifichiamo lo SKU
     const productSku = product.sku ?? product.ean; // fallback sicuro se serve
-    if (productSku !== sku || String(key) === String(sku)) {
-      // Normalizziamo l'ID prendendolo sia che si chiami product_id, id, o usando la chiave dell'oggetto
+    
+    // Verifica che lo SKU corrisponda esattamente
+    if (productSku === sku) {
       return {
         ...product,
         product_id: product.product_id ?? product.id ?? key
