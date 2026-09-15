@@ -131,9 +131,8 @@ function normalizeProduct(source) {
   const normalized = { ...source };
 
   // +++ NUOVO BLOCCO 1: Controllo severo campi obbligatori +++
- 
   if (!source.id || typeof source.id !== 'string' || source.id.trim() === '') {
-    throw new Error('Validazione SKU (id) mancante.');
+    throw new Error('Validazione fallita: SKU mancante.');
   }
   if (!source.title || typeof source.title !== 'string' || source.title.trim() === '') {
     throw new Error('Validazione fallita: Titolo mancante.');
@@ -151,7 +150,6 @@ function normalizeProduct(source) {
   }
 
   // +++ NUOVO BLOCCO 2: Pulizia spazi EAN e check sintassi URL +++
-  
   if (source.ean != null) {
     normalized.ean = source.ean.replace(/\s+/g, ''); // Rimuove gli spazi anomali
     if (normalized.ean !== '' && !/^\d{8,14}$/.test(normalized.ean)) {
