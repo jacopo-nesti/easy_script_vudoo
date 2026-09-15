@@ -4,3 +4,4 @@ real_products.json
 node_modules/
 *.log
 .DS_Store
+*.vs

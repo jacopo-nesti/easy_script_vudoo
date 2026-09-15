@@ -163,6 +163,11 @@ function buildBasePayload(product, config) {
     if (product[field] != null) payload[field] = product[field];
   }
 
+  // Aggiunta dell'ID Produttore nel payload se presente
+  if (product.manufacturer_id != null) {
+    payload.manufacturer_id = product.manufacturer_id;
+  }
+
   const textFields = {};
   if (product.title != null) textFields.name = product.title;
   if (product.description != null) textFields.description = product.description;
@@ -331,10 +336,26 @@ async function main() {
   try {
     config.inventory = await getBaseInventory();
     log(`[DEBUG] Inventory selezionato: ${config.inventory.name} (${config.inventory.inventory_id})`);
+    
     stage = 'recupero gruppo prezzi';
     log('[DEBUG] Recupero gruppo prezzi');
     config.priceGroup = await getBasePriceGroup(config.inventory);
     log(`[DEBUG] Gruppo prezzi selezionato: ${config.priceGroup.name} (${config.priceGroup.price_group_id})`);
+
+    // RECUPERO PRODUTTORI DA BASE.COM
+    stage = 'recupero produttori';
+    log('[DEBUG] Caricamento produttori esistenti da Base.com...');
+    const mfgData = await callBase('getInventoryManufacturers');
+    const mfgMap = new Map();
+    if (mfgData.manufacturers) {
+      for (const m of Object.values(mfgData.manufacturers)) {
+        if (m.name && m.manufacturer_id) {
+          mfgMap.set(m.name.trim().toLowerCase(), m.manufacturer_id);
+        }
+      }
+    }
+    log(`[DEBUG] Mappati ${mfgMap.size} produttori da Base.com`);
+
     stage = 'lettura real_products.json';
     log('File sorgente: real_products.json');
     log('[DEBUG] Lettura real_products.json');
@@ -361,8 +382,21 @@ async function main() {
       log(`\nImportazione ${sourceProduct?.id ?? '(SKU assente)'}...`);
       try {
         const product = normalizeProduct(sourceProduct);
+
+        // ABBINAMENTO MANUFACTURER_ID TRAMITE IL NOME DEL BRAND
+        if (product.brand) {
+          const brandKey = product.brand.trim().toLowerCase();
+          if (mfgMap.has(brandKey)) {
+            product.manufacturer_id = mfgMap.get(brandKey);
+            log(`[DEBUG] Brand trovato: "${product.brand}" -> manufacturer_id: ${product.manufacturer_id}`);
+          } else {
+            log(`[WARNING] Brand "${product.brand}" non ancora presente su Base.com`);
+          }
+        }
+
         log(`[DEBUG] Normalizzazione completata\nProdotto normalizzato:\n${JSON.stringify(product, null, 2)}`);
-        log(`SKU: ${product.sku ?? '(assente)'}\nNome: ${product.title ?? '(assente)'}\nEAN: ${product.ean ?? '(assente)'}\nPrezzo: ${product.price ?? '(assente)'}\nPeso: ${product.weight ?? '(assente)'}\nImmagine: ${product.image_link ?? '(assente)'}`);
+        log(`SKU: ${product.sku ?? '(assente)'}\nNome: ${product.title ?? '(assente)'}\nEAN: ${product.ean ?? '(assente)'}\nPrezzo: ${product.price ?? '(assente)'}\nPeso: ${product.weight ?? '(assente)'}\nImmagine: ${product.image_link ?? '(assente)'}\nManufacturer ID: ${product.manufacturer_id ?? '(assente)'}`);
+
         
         // Gestione intelligente (Controllo esistenza -> Recupero dati -> Confronto -> Aggiornamento o Skip)
         const existingProduct = await findProductInBase(product.sku, config.inventory.inventory_id);
@@ -385,8 +419,6 @@ async function main() {
           }
           continue;
         }
-
-        // Se il prodotto non esiste, si procede alla creazione da capo
         const result = await sendProductToBase(product, config);
         if (!result) {
           simulated++;
@@ -420,3 +452,4 @@ main().catch(error => {
   log(`ERROR: ${error.message}`);
   process.exitCode = 1;
 });
+
