@@ -86,6 +86,14 @@ export function normalizeProduct(source) {
   return normalized;
 }
 
+export function sanitizeTextForBase(text) {
+  return text.replace(/ *(?:[\u{10000}-\u{10FFFF}][\uFE0E\uFE0F]? *)+/gu, (removed, offset) => {
+    const before = text[offset - 1];
+    const after = text[offset + removed.length];
+    return removed.includes(' ') && before && after && !/[\r\n]/.test(before + after) ? ' ' : '';
+  });
+}
+
 export function buildBasePayload(product, config) {
   const payload = { inventory_id: config.inventory.inventory_id };
   for (const field of ['sku', 'ean', 'weight']) {
@@ -101,8 +109,8 @@ export function buildBasePayload(product, config) {
   }
 
   const textFields = {};
-  if (product.title != null) textFields.name = product.title;
-  if (product.description != null) textFields.description = product.description;
+  if (product.title != null) textFields.name = sanitizeTextForBase(product.title);
+  if (product.description != null) textFields.description = sanitizeTextForBase(product.description);
   if (Object.keys(textFields).length > 0) payload.text_fields = textFields;
 
   if (product.price != null) {

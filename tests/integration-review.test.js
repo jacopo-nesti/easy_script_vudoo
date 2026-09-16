@@ -4,11 +4,62 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 import * as xml from 'fast-xml-parser';
-import { parseFeedNumber, normalizeProduct, buildBasePayload, buildBaseUpdatePayload, detectAndFilterDuplicates } from '../src/products.js';
+import { parseFeedNumber, normalizeProduct, buildBasePayload, buildBaseUpdatePayload, detectAndFilterDuplicates, sanitizeTextForBase } from '../src/products.js';
 
 const source = { id: 'SKU-A', title: 'Prodotto', price: '25,00 EUR', weight: '0.1 Kg', brand: 'Marca', product_type: 'Casa > Cura' };
 const config = { inventory: { inventory_id: 10 }, priceGroup: { price_group_id: 20, currency: 'EUR' }, warehouse: { id: 'bl_30' } };
 const details = { sku: 'SKU-A', weight: 0.1, text_fields: { name: 'Prodotto' }, prices: { 99: 100, 20: 25 }, manufacturer_id: 40, category_id: 51, images: {} };
+
+test('Sanitizzazione: elimina non-BMP e spazi introdotti dalla rimozione', () => {
+  assert.equal(sanitizeTextForBase('Test 💧 descrizione 🖤 finale'), 'Test descrizione finale');
+  assert.equal(sanitizeTextForBase("Capelli sani. 💧 Modo d'uso"), "Capelli sani. Modo d'uso");
+  assert.equal(sanitizeTextForBase('💧 Test 🖤'), 'Test');
+  assert.equal(sanitizeTextForBase('Test 💧 🖤 finale'), 'Test finale');
+  assert.equal(sanitizeTextForBase('a💧b'), 'ab');
+});
+
+test('Sanitizzazione: preserva Unicode BMP e formattazione non coinvolta', () => {
+  const text = 'È già tutto così – 25€ ✨ à è é ì ò ù l’uso ✨️\n\n  Due  spazi\tqui';
+  assert.equal(sanitizeTextForBase(text), text);
+  assert.equal(sanitizeTextForBase('Prima  riga\r\n💧 Seconda\n\nTerza'), 'Prima  riga\r\nSeconda\n\nTerza');
+});
+
+test('Sanitizzazione: rimuove il selettore associato a emoji non-BMP ed è idempotente', () => {
+  const text = '🖌️ Pennello 🌿 🌺 cura';
+  assert.equal(sanitizeTextForBase(text), 'Pennello cura');
+  assert.equal(sanitizeTextForBase(sanitizeTextForBase(text)), sanitizeTextForBase(text));
+});
+
+test('CREATE sanitizza nome e descrizione senza modificare il prodotto sorgente', () => {
+  const product = normalizeProduct({ ...source, title: 'Nome 💧 prodotto', description: 'Test 💧 descrizione' });
+  assert.deepEqual(buildBasePayload(product, config).text_fields, { name: 'Nome prodotto', description: 'Test descrizione' });
+  assert.equal(product.description, 'Test 💧 descrizione');
+  assert.equal(product.title, 'Nome 💧 prodotto');
+});
+
+test('UPDATE: Base già sanitizzato e feed con emoji restituiscono null', () => {
+  const product = normalizeProduct({ ...source, title: 'Prodotto 💧', description: 'Test 💧 descrizione' });
+  const existing = { ...details, text_fields: { name: 'Prodotto', description: 'Test descrizione' } };
+  assert.equal(buildBaseUpdatePayload(product, existing, config), null);
+});
+
+test('UPDATE: una vera modifica rimane visibile e viene inviata sanitizzata', () => {
+  const product = normalizeProduct({ ...source, description: 'Nuova descrizione 💧' });
+  const existing = { ...details, text_fields: { name: 'Prodotto', description: 'Vecchia descrizione' } };
+  assert.deepEqual(buildBaseUpdatePayload(product, existing, config), {
+    inventory_id: 10, text_fields: { description: 'Nuova descrizione' },
+  });
+});
+
+test('UPDATE: i punti interrogativi già salvati richiedono una sola pulizia', () => {
+  const product = normalizeProduct({ ...source, description: 'Test 💧 descrizione?' });
+  const existing = { ...details, text_fields: { name: 'Prodotto', description: 'Test ? descrizione?' } };
+  const update = buildBaseUpdatePayload(product, existing, config);
+  assert.equal(update.text_fields.description, 'Test descrizione?');
+  assert.equal(buildBaseUpdatePayload(product, {
+    ...existing, text_fields: { ...existing.text_fields, ...update.text_fields },
+  }, config), null);
+});
 
 async function sandbox(options = {}) {
   const calls = [], logs = [], writes = new Map();
