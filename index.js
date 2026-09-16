@@ -3,6 +3,7 @@ import { log } from './src/logger.js';
 import { getBaseInventory, getBasePriceGroup, getBaseWarehouse, productExistsInBase, sendProductToBase } from './src/baseApi.js';
 import { getProducts, normalizeProduct } from './src/products.js';
 import { getManufacturerMap, assignManufacturer } from './src/manufacturers.js';
+import { findProductInBase, getBaseProductDetails, hasProductChanged, updateProductInBase } from './update-inventory.js';
 
 async function main() {
   log('[DEBUG] Avvio script');
@@ -15,20 +16,20 @@ async function main() {
   const config = {};
   let read = 0;
   let processed = 0;
+  let imported = 0;
+  let skipped = 0;
   let created = 0;
   let updated = 0;
-  let skipped = 0;
   let simulated = 0;
   let selectedCount = 0;
   let errors = 0;
-  const errorSkus = [];
   let stage = 'getInventories';
   let warehouseStatus = 'non selezionato';
 
   try {
     config.inventory = await getBaseInventory();
     log(`[DEBUG] Inventory selezionato: ${config.inventory.name} (${config.inventory.inventory_id})`);
-
+    
     stage = 'recupero gruppo prezzi';
     log('[DEBUG] Recupero gruppo prezzi');
     config.priceGroup = await getBasePriceGroup(config.inventory);
@@ -70,26 +71,47 @@ async function main() {
 
         log(`[DEBUG] Normalizzazione completata\nProdotto normalizzato:\n${JSON.stringify(product, null, 2)}`);
         log(`SKU: ${product.sku ?? '(assente)'}\nNome: ${product.title ?? '(assente)'}\nEAN: ${product.ean ?? '(assente)'}\nPrezzo: ${product.price ?? '(assente)'}\nPeso: ${product.weight ?? '(assente)'}\nImmagine: ${product.image_link ?? '(assente)'}\nManufacturer ID: ${product.manufacturer_id ?? '(assente)'}`);
-
-        if (await productExistsInBase(product.sku, config.inventory.inventory_id)) {
-          skipped++;
-          log(`SKIPPED - SKU ${product.sku} già presente nel catalogo`);
-          continue;
+        
+        // 1. Cerca il prodotto su Base.com tramite SKU
+        const existingProduct = await findProductInBase(product.sku, config.inventory.inventory_id);
+        
+        if (existingProduct) {
+          // 2. Se esiste, recupera i dettagli completi da Base.com per confrontarli
+          const existingDetails = await getBaseProductDetails(config.inventory.inventory_id, existingProduct.product_id);
+          
+          // 3. Verifica se ci sono differenze tra il file JSON e Base.com
+          if (hasProductChanged(product, existingDetails)) {
+            log(`Rilevate modifiche per SKU ${product.sku}. Procedo con l'aggiornamento...`);
+            
+            const result = await updateProductInBase(existingProduct.product_id, product, config);
+            
+            if (!result) {
+              simulated++;
+              continue;
+            }
+            updated++; // Incrementa il contatore degli aggiornati
+            log(`SUCCESS (Aggiornato) - product_id: ${existingProduct.product_id}`);
+          } else {
+            skipped++;
+            log(`SKIPPED - SKU ${product.sku} già presente e nessun dato modificato`);
+          }
+          continue; // Passa al prodotto successivo
         }
-
+        
+        // 4. Se il prodotto NON esiste, procedi alla creazione normale
         const result = await sendProductToBase(product, config);
         if (!result) {
           simulated++;
           continue;
         }
         created++;
-        log(`SUCCESS - product_id: ${result.product_id}`);
+        log(`SUCCESS (Creato) - product_id: ${result.product_id}`);
+
         if (result.warnings && Object.keys(result.warnings).length > 0) {
           log(`Avvisi Base.com: ${JSON.stringify(result.warnings)}`);
         }
       } catch (error) {
         errors++;
-        errorSkus.push(sourceProduct?.id ?? 'sconosciuto');
         log(`ERROR: ${error.message}`);
       }
     }
@@ -101,19 +123,7 @@ async function main() {
     log(`\nInventory: ${inventory ? `${inventory.name} (${inventory.inventory_id})` : 'non selezionato'}`);
     log(`Gruppo prezzi: ${priceGroup ? `${priceGroup.name} (${priceGroup.price_group_id}, ${priceGroup.currency})` : 'non selezionato'}`);
     log(`Warehouse: ${warehouse ? `${warehouse.name} (${warehouse.id})` : warehouseStatus}`);
-    log(`\n=== RIEPILOGO FINALE ===`);
-    log(`Prodotti letti: ${read}`);
-    log(`Prodotti selezionati: ${selectedCount}`);
-    log(`Prodotti processati: ${processed}`);
-    log(``);
-    log(`Creati: ${created}`);
-    log(`Aggiornati: ${updated}`);
-    log(`Già presenti: ${skipped}`);
-    log(`Simulati: ${simulated}`);
-    log(`Errori: ${errors}`);
-    if (errorSkus.length > 0) {
-      log(`SKU con errori: ${errorSkus.join(', ')}`);
-    }
+    log(`Prodotti letti: ${read}\nProdotti selezionati: ${selectedCount}\nProdotti processati: ${processed}\nImportati: ${imported}\nSaltati perché già presenti: ${skipped}\nSimulati: ${simulated}\nErrori: ${errors}`);
     if (errors > 0) process.exitCode = 1;
   }
 }
