@@ -1,10 +1,10 @@
 import { getProducts, normalizeProduct, detectAndFilterDuplicates } from './src/products.js';
 import { getBaseInventory, getBasePriceGroup, getBaseWarehouse, sendProductToBase, getBaseProductIdBySku } from './src/baseApi.js';
-import { getCategoryMap, ensureCategoryPath } from './src/categories.js';
+import { getCategoryMap, ensureCategoryPath, getManufacturerMap, ensureManufacturer } from './src/categories.js';
 import { log } from './src/logger.js';
 
 async function run() {
-  log('--- INIZIO PROCEDURA DI IMPORTAZIONE/AGGIORNAMENTO ---');
+  log('--- INIZIO PROCEDURA DI IMPORTAZIONE ---');
 
   const rawProducts = await getProducts();
   log(`Letti ${rawProducts.length} prodotti totali dal feed.`);
@@ -20,7 +20,9 @@ async function run() {
   const warehouse = await getBaseWarehouse(inventory);
   const config = { inventory, priceGroup, warehouse };
 
+  // Caricamento Categorie e Produttori
   const categoryMap = await getCategoryMap(inventory.inventory_id);
+  const manufacturerMap = await getManufacturerMap();
 
   let countCreated = 0;
   let countUpdated = 0;
@@ -43,15 +45,23 @@ async function run() {
         );
       }
 
-      // 2. Controllo se esiste già su Base.com
+      // 2. Risoluzione / Creazione Produttore (da campo "brand")
+      if (product.brand) {
+        product.manufacturer_id = await ensureManufacturer(
+          product.brand,
+          manufacturerMap
+        );
+      }
+
+      // 3. Controllo presenza e invio su Base.com
       const existingProductId = await getBaseProductIdBySku(sku, inventory.inventory_id);
 
       if (existingProductId) {
-        log(`[AGGIORNAMENTO] Prodotto esistente trovati (ID: ${existingProductId}) - Aggiorno SKU: ${sku} | Categoria ID: ${product.category_id}`);
+        log(`[AGGIORNAMENTO] SKU: ${sku} | Categoria ID: ${product.category_id ?? 'N/D'} | Produttore ID: ${product.manufacturer_id ?? 'N/D'}`);
         await sendProductToBase(product, config, existingProductId);
         countUpdated++;
       } else {
-        log(`[CREAZIONE] Nuovo prodotto - Invio SKU: ${sku} | Categoria ID: ${product.category_id}`);
+        log(`[CREAZIONE] SKU: ${sku} | Categoria ID: ${product.category_id ?? 'N/D'} | Produttore ID: ${product.manufacturer_id ?? 'N/D'}`);
         await sendProductToBase(product, config, null);
         countCreated++;
       }

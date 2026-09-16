@@ -1,17 +1,12 @@
 import { callBase } from './baseApi.js';
 import { log } from './logger.js';
 
-/**
- * Normalizza il testo per garantire confronti coerenti
- */
-function cleanCategoryName(name) {
+function cleanName(name) {
   if (!name || typeof name !== 'string') return '';
   return name.trim().replace(/\s+/g, ' ');
 }
 
-/**
- * Carica tutte le categorie esistenti su Base.com e costruisce una mappa in memoria
- */
+// --- GESTIONE CATEGORIE ---
 export async function getCategoryMap(inventoryId) {
   log('[DEBUG] Caricamento albero categorie esistenti da Base.com...');
   const data = await callBase('getInventoryCategories', { inventory_id: inventoryId });
@@ -19,11 +14,9 @@ export async function getCategoryMap(inventoryId) {
 
   if (data.categories && Array.isArray(data.categories)) {
     for (const cat of data.categories) {
-      const cleanName = cleanCategoryName(cat.name).toLowerCase();
+      const cleanCatName = cleanName(cat.name).toLowerCase();
       const parentId = cat.parent_id ?? 0;
-      
-      // Chiave univoca basata sul Padre e sul Nome della Categoria
-      const key = `${parentId}:${cleanName}`;
+      const key = `${parentId}:${cleanCatName}`;
       categoryMap.set(key, cat.category_id);
     }
   }
@@ -32,19 +25,14 @@ export async function getCategoryMap(inventoryId) {
   return categoryMap;
 }
 
-/**
- * Analizza il tipo di prodotto e assicura l'intera gerarchia padre/figlio.
- * Supporta separatori multipli: '>', '/', '|', ','
- */
 export async function ensureCategoryPath(productType, inventoryId, categoryMap) {
   if (!productType || typeof productType !== 'string' || productType.trim() === '') {
     return null;
   }
 
-  // Splitting avanzato per gestire tutti i principali tipi di separatori nei feed XML/JSON
   const parts = productType
     .split(/>|\/|\||,/)
-    .map(p => cleanCategoryName(p))
+    .map(p => cleanName(p))
     .filter(p => p.length > 0);
 
   if (parts.length === 0) return null;
@@ -56,11 +44,9 @@ export async function ensureCategoryPath(productType, inventoryId, categoryMap) 
     pathHierarchy.push(categoryName);
     const lookupKey = `${currentParentId}:${categoryName.toLowerCase()}`;
 
-    // 1. Categoria già mappata/esistente
     if (categoryMap.has(lookupKey)) {
       currentParentId = categoryMap.get(lookupKey);
     } else {
-      // 2. Categoria mancante: Creazione a cascata
       const currentPathString = pathHierarchy.join(' > ');
       log(`[CATEGORIA] Creazione nuovo livello: "${categoryName}" (Percorso: "${currentPathString}", Parent ID: ${currentParentId})`);
 
@@ -82,6 +68,47 @@ export async function ensureCategoryPath(productType, inventoryId, categoryMap) 
     }
   }
 
-  // Ritorna l'ID della categoria foglia (l'ultima della gerarchia)
   return currentParentId;
+}
+
+// --- GESTIONE PRODUTTORI / MARCHE ---
+export async function getManufacturerMap() {
+  log('[DEBUG] Caricamento produttori esistenti da Base.com...');
+  const data = await callBase('getInventoryManufacturers');
+  const manufacturerMap = new Map();
+
+  if (data.manufacturers && Array.isArray(data.manufacturers)) {
+    for (const man of data.manufacturers) {
+      manufacturerMap.set(cleanName(man.name).toLowerCase(), man.manufacturer_id);
+    }
+  }
+
+  log(`[DEBUG] Mappati ${manufacturerMap.size} produttori presenti su Base.com`);
+  return manufacturerMap;
+}
+
+export async function ensureManufacturer(brandName, manufacturerMap) {
+  const cleaned = cleanName(brandName);
+  if (!cleaned) return null;
+
+  const lookupKey = cleaned.toLowerCase();
+
+  if (manufacturerMap.has(lookupKey)) {
+    return manufacturerMap.get(lookupKey);
+  }
+
+  log(`[PRODUTTORE] Creazione nuovo produttore: "${cleaned}"...`);
+  const response = await callBase('addInventoryManufacturer', {
+    name: cleaned
+  });
+
+  if (!response.manufacturer_id) {
+    throw new Error(`Impossibile creare il produttore "${cleaned}" su Base.com.`);
+  }
+
+  const newId = response.manufacturer_id;
+  manufacturerMap.set(lookupKey, newId);
+  log(`[SUCCESS] Produttore creato con successo: "${cleaned}" (ID: ${newId})`);
+
+  return newId;
 }

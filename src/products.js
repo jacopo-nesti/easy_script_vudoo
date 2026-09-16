@@ -85,11 +85,13 @@ export function buildBasePayload(product, config) {
     if (product[field] != null) payload[field] = product[field];
   }
 
-  if (product.manufacturer_id != null) {
-    payload.manufacturer_id = product.manufacturer_id;
+  // Assegnazione ID Produttore
+  const parsedManufacturerId = parseInt(product.manufacturer_id, 10);
+  if (!isNaN(parsedManufacturerId) && parsedManufacturerId > 0) {
+    payload.manufacturer_id = parsedManufacturerId;
   }
 
-  // Forza il casting a intero del category_id per l'API di Base.com
+  // Assegnazione ID Categoria
   const parsedCategoryId = parseInt(product.category_id, 10);
   if (!isNaN(parsedCategoryId) && parsedCategoryId > 0) {
     payload.category_id = parsedCategoryId;
