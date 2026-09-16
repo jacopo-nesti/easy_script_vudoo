@@ -123,3 +123,31 @@ export async function sendProductToBase(product, config) {
   }
   return await callBase('addInventoryProduct', payload);
 }
+export async function checkSkuStatus(sku, inventoryId) {
+  const response = await callBase('getInventoryProductsList', {
+    inventory_id: inventoryId,
+    filter_sku: sku
+  });
+
+  const matches = Object.values(response.products || {});
+
+  if (matches.length === 0) {
+    return { status: 'ABSENT' };
+  }
+
+  if (matches.length === 1) {
+    const item = matches[0];
+    const isVariant = Boolean(item.parent_id && item.parent_id !== 0);
+    return {
+      status: isVariant ? 'VARIANT_EXISTS' : 'EXISTS_SINGLE',
+      productId: item.id,
+      parentId: item.parent_id || null
+    };
+  }
+
+  return {
+    status: 'AMBIGUOUS',
+    count: matches.length,
+    productIds: matches.map(p => p.id)
+  };
+}
