@@ -103,8 +103,7 @@ export function buildBasePayload(product, config) {
     payload.prices = { [config.priceGroup.price_group_id]: product.price };
   }
   if (product.quantity != null) {
-    if (!config.warehouse) throw new Error('Magazzino mancante per la quantita.');
-    payload.stock = { [config.warehouse.id]: product.quantity };
+    payload.stock = { default: product.quantity };
   }
   if (product.image_link != null) {
     if (!URL.canParse(product.image_link) || !['http:', 'https:'].includes(new URL(product.image_link).protocol)) {
