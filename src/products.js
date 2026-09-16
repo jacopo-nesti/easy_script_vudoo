@@ -27,7 +27,6 @@ export function normalizeProduct(source) {
   }
   const normalized = { ...source };
 
-  // +++ BLOCCO 1: Controllo severo campi obbligatori +++
   if (!source.id || typeof source.id !== 'string' || source.id.trim() === '') {
     throw new Error('Validazione fallita: SKU mancante.');
   }
@@ -45,9 +44,8 @@ export function normalizeProduct(source) {
     }
   }
 
-  // +++ BLOCCO 2: Pulizia spazi EAN e check sintassi URL +++
   if (source.ean != null) {
-    normalized.ean = source.ean.replace(/\s+/g, ''); // Rimuove gli spazi anomali
+    normalized.ean = source.ean.replace(/\s+/g, '');
     if (normalized.ean !== '' && !/^\d{8,14}$/.test(normalized.ean)) {
       throw new Error(`Validazione fallita: EAN non valido (${source.ean}).`);
     }
@@ -82,13 +80,18 @@ export function normalizeProduct(source) {
 
 export function buildBasePayload(product, config) {
   const payload = { inventory_id: config.inventory.inventory_id };
+
   for (const field of ['sku', 'ean', 'weight']) {
     if (product[field] != null) payload[field] = product[field];
   }
 
-  // Aggiunta dell'ID Produttore nel payload se presente
   if (product.manufacturer_id != null) {
     payload.manufacturer_id = product.manufacturer_id;
+  }
+
+  // Aggiunta ID Categoria convertito in numero
+  if (product.category_id != null && Number(product.category_id) > 0) {
+    payload.category_id = Number(product.category_id);
   }
 
   const textFields = {};
@@ -112,29 +115,29 @@ export function buildBasePayload(product, config) {
     payload.images = { '0': `url:${product.image_link}` };
   }
   return payload;
+}
+
+export function detectAndFilterDuplicates(products) {
+  const seenSkus = new Set();
+  const duplicatesMap = new Map();
+  const uniqueProducts = [];
+
+  for (const product of products) {
+    const sku = product.id ?? product.sku;
+    if (!sku) continue;
+
+    if (seenSkus.has(sku)) {
+      const count = duplicatesMap.get(sku) ?? 1;
+      duplicatesMap.set(sku, count + 1);
+    } else {
+      seenSkus.add(sku);
+      uniqueProducts.push(product);
+    }
   }
 
-  export function detectAndFilterDuplicates(products) {
-    const seenSkus = new Set();
-    const duplicatesMap = new Map();
-    const uniqueProducts = [];
-
-    for (const product of products) {
-      const sku = product.id ?? product.sku;
-      if (!sku) continue;
-
-      if (seenSkus.has(sku)) {
-        const count = duplicatesMap.get(sku) ?? 1;
-        duplicatesMap.set(sku, count + 1);
-      } else {
-        seenSkus.add(sku);
-        uniqueProducts.push(product);
-      }
-    }
-
-    return {
-      uniqueProducts,
-      duplicatesMap,
-      hasDuplicates: duplicatesMap.size > 0
-    };
+  return {
+    uniqueProducts,
+    duplicatesMap,
+    hasDuplicates: duplicatesMap.size > 0
+  };
 }

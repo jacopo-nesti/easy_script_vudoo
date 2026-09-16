@@ -23,21 +23,16 @@ export async function callBase(method, parameters = {}) {
 
 export async function getBaseInventory() {
   const data = await callBase('getInventories');
-  log('[DEBUG] Chiamata getInventories completata');
   if (!Array.isArray(data.inventories) || data.inventories.length === 0) {
     throw new Error('getInventories: nessun catalogo trovato su Base.com.');
   }
-  log(`[DEBUG] Inventory disponibili: ${data.inventories.length}`);
 
   if (inventoryId) {
     const inventory = data.inventories.find(item => String(item.inventory_id) === inventoryId);
     if (inventory) return inventory;
-    log(`[WARNING] BASE_INVENTORY_ID=${inventoryId} non trovato. Uso il primo catalogo disponibile.`);
   }
 
-  const defaultInventory = data.inventories[0];
-  log(`[DEBUG] Catalogo selezionato automaticamente (default): ${defaultInventory.name} (ID: ${defaultInventory.inventory_id})`);
-  return defaultInventory;
+  return data.inventories[0];
 }
 
 export async function getBasePriceGroup(inventory) {
@@ -54,46 +49,53 @@ export async function getBasePriceGroup(inventory) {
       : priceGroup.is_default === true
   );
   if (defaults.length !== 1) {
-    for (const priceGroup of priceGroups) {
-      log(`Gruppo prezzi disponibile: ${priceGroup.name} (${priceGroup.currency}) - ID: ${priceGroup.price_group_id}`);
-    }
-    throw new Error('Gruppo prezzi predefinito non identificabile. Indica quale usare; nessuna importazione eseguita.');
+    throw new Error('Gruppo prezzi predefinito non identificabile.');
   }
-  const priceGroup = defaults[0];
-  log(`Gruppo prezzi predefinito: ${priceGroup.name} (${priceGroup.currency})\nprice_group_id: ${priceGroup.price_group_id}`);
-  return priceGroup;
+  return defaults[0];
 }
 
 export async function getBaseWarehouse(inventory) {
   return { name: 'Default Warehouse', id: 'default' };
 }
 
-export async function productExistsInBase(sku, inventoryId) {
-  if (typeof sku !== 'string' || sku.trim() === '') {
-    throw new Error('Controllo duplicati: SKU mancante o non valido.');
-  }
-  const data = await callBase('getInventoryProductsList', {
-    inventory_id: inventoryId,
-    filter_sku: sku,
-  });
-  if (!data.products || typeof data.products !== 'object') {
-    throw new Error('getInventoryProductsList: elenco prodotti non valido.');
-  }
-  for (const product of Object.values(data.products)) {
-    if (!product || typeof product.sku !== 'string') {
-      throw new Error('getInventoryProductsList: prodotto senza SKU valido nella risposta.');
-    }
-    if (product.sku === sku) return true;
-  }
-  return false;
-}
-
-export async function sendProductToBase(product, config) {
-  const payload = buildBasePayload(product, config);
-  if (dryRun === 'true') {
-    log(`Payload Base.com (addInventoryProduct):\n${JSON.stringify(payload, null, 2)}`);
-    log('DRY_RUN: nessuna scrittura su Base.com');
+// Cerca il prodotto e restituisce l'ID Base.com se esiste, altrimenti null
+export async function getBaseProductIdBySku(sku, inventoryId) {
+  if (!sku || typeof sku !== 'string' || sku.trim() === '') {
     return null;
   }
-  return await callBase('addInventoryProduct', payload);
+
+  const data = await callBase('getInventoryProductsList', {
+    inventory_id: inventoryId,
+    filter_sku: sku.trim(),
+  });
+
+  if (!data.products || typeof data.products !== 'object') {
+    return null;
+  }
+
+  const productsList = Object.entries(data.products);
+  if (productsList.length === 0) {
+    return null;
+  }
+
+  // Trova la corrispondenza esatta per SKU e restituisce l'ID del prodotto
+  const match = productsList.find(([_, p]) => p && p.sku && p.sku.trim() === sku.trim());
+  return match ? match[0] : null;
+}
+
+export async function sendProductToBase(product, config, existingProductId = null) {
+  const payload = buildBasePayload(product, config);
+
+  if (dryRun === 'true') {
+    log(`[DRY_RUN] Payload Base.com:\n${JSON.stringify(payload, null, 2)}`);
+    return null;
+  }
+
+  // Se il prodotto esiste già, aggiornalo. Altrimenti crealo da zero.
+  if (existingProductId) {
+    payload.product_id = existingProductId;
+    return await callBase('addInventoryProduct', payload); // Base.com usa addInventoryProduct con product_id per aggiornare
+  } else {
+    return await callBase('addInventoryProduct', payload);
+  }
 }
