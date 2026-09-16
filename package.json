@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node --env-file=.env index.js",
     "convert": "node convert_xml_to_json.js",
-    "produttore": "node productor.js"
+    "productor": "node productor.js"
   },
   "engines": {
     "node": ">=22"
