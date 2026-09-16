@@ -18,6 +18,8 @@ async function main() {
   let processed = 0;
   let imported = 0;
   let skipped = 0;
+  let created = 0;
+  let updated = 0;
   let simulated = 0;
   let selectedCount = 0;
   let errors = 0;
