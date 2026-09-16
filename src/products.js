@@ -112,4 +112,29 @@ export function buildBasePayload(product, config) {
     payload.images = { '0': `url:${product.image_link}` };
   }
   return payload;
+  }
+
+  export function detectAndFilterDuplicates(products) {
+    const seenSkus = new Set();
+    const duplicatesMap = new Map();
+    const uniqueProducts = [];
+
+    for (const product of products) {
+      const sku = product.id ?? product.sku;
+      if (!sku) continue;
+
+      if (seenSkus.has(sku)) {
+        const count = duplicatesMap.get(sku) ?? 1;
+        duplicatesMap.set(sku, count + 1);
+      } else {
+        seenSkus.add(sku);
+        uniqueProducts.push(product);
+      }
+    }
+
+    return {
+      uniqueProducts,
+      duplicatesMap,
+      hasDuplicates: duplicatesMap.size > 0
+    };
 }
