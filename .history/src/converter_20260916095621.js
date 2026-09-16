@@ -23,7 +23,7 @@ export function completeFields(object, expected, label) {
 }
 
 export async function convertXmlToJson() {
-  const xml = await readFile(new URL('../GM.xml', import.meta.url), 'utf8');
+  const xml = await readFile(new URL('../VUDOO.xml', import.meta.url), 'utf8');
   const validation = XMLValidator.validate(xml);
   if (validation !== true) {
     throw new Error(`XML non valido: ${validation.err.msg} (riga ${validation.err.line})`);

@@ -33,7 +33,7 @@ export function parseFeedNumber(value, unit, field) {
   }
   return number;
 }
-
+}
 
 export function normalizeProduct(source) {
   if (!source || typeof source !== 'object' || Array.isArray(source)) {

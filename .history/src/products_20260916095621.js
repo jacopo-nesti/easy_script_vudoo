@@ -13,27 +13,13 @@ export function parseFeedNumber(value, unit, field) {
   if (typeof value !== 'string' || !value.trim().endsWith(unit)) {
     throw new Error(`${field} deve essere una stringa con unita ${unit}.`);
   }
-  
-  let text = value.trim().slice(0, -unit.length).replace(/\s/g, '');
-  
-  // +++ INIZIO NUOVA LOGICA: Gestione separatore migliaia italiano +++
-  if (text.includes(',')) {
-    // Se c'è la virgola decimale (es. 1.098,00), eliminiamo i punti delle migliaia
-    text = text.replace(/\./g, '');
-    // Sostituiamo la virgola decimale con il punto standard per JS
-    text = text.replace(',', '.');
-  }
-  // Se non c'è la virgola (es. "0.1" del peso Kg), il text rimane invariato
-  // +++ FINE NUOVA LOGICA +++
-
+  const text = value.trim().slice(0, -unit.length).replace(/\s/g, '').replace(',', '.');
   const number = Number(text);
-  
   if (!/^\d+(\.\d+)?$/.test(text) || !Number.isFinite(number)) {
-    throw new Error(`${field} contiene un numero non valido (${value}).`);
+    throw new Error(`${field} contiene un numero non valido.`);
   }
   return number;
 }
-
 
 export function normalizeProduct(source) {
   if (!source || typeof source !== 'object' || Array.isArray(source)) {
