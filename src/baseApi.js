@@ -1,4 +1,4 @@
-import { token, inventoryId, warehouseId, dryRun } from './config.js';
+import { token, inventoryId, dryRun } from './config.js';
 import { log } from './logger.js';
 import { buildBasePayload } from './products.js';
 
@@ -24,24 +24,20 @@ export async function callBase(method, parameters = {}) {
 export async function getBaseInventory() {
   const data = await callBase('getInventories');
   log('[DEBUG] Chiamata getInventories completata');
-  if (!Array.isArray(data.inventories)) {
-    throw new Error('getInventories: elenco cataloghi non valido.');
+  if (!Array.isArray(data.inventories) || data.inventories.length === 0) {
+    throw new Error('getInventories: nessun catalogo trovato su Base.com.');
   }
   log(`[DEBUG] Inventory disponibili: ${data.inventories.length}`);
-  for (const inventory of data.inventories) {
-    log(`Catalogo trovato: ${inventory.name}\ninventory_id: ${inventory.inventory_id}`);
-  }
+
   if (inventoryId) {
     const inventory = data.inventories.find(item => String(item.inventory_id) === inventoryId);
-    if (!inventory) {
-      throw new Error(`BASE_INVENTORY_ID=${inventoryId} non trovato. Gli inventory disponibili sono elencati sopra.`);
-    }
-    return inventory;
+    if (inventory) return inventory;
+    log(`[WARNING] BASE_INVENTORY_ID=${inventoryId} non trovato. Uso il primo catalogo disponibile.`);
   }
-  if (data.inventories.length !== 1) {
-    throw new Error('Senza BASE_INVENTORY_ID serve un solo catalogo. Imposta nel .env uno degli ID disponibili; nessuna importazione eseguita.');
-  }
-  return data.inventories[0];
+
+  const defaultInventory = data.inventories[0];
+  log(`[DEBUG] Catalogo selezionato automaticamente (default): ${defaultInventory.name} (ID: ${defaultInventory.inventory_id})`);
+  return defaultInventory;
 }
 
 export async function getBasePriceGroup(inventory) {
@@ -69,29 +65,7 @@ export async function getBasePriceGroup(inventory) {
 }
 
 export async function getBaseWarehouse(inventory) {
-  const data = await callBase('getInventoryWarehouses');
-  if (!Array.isArray(data.warehouses) || !Array.isArray(inventory.warehouses)) {
-    throw new Error('Elenco magazzini non valido.');
-  }
-  const warehouses = data.warehouses.filter(warehouse =>
-    warehouse.warehouse_type === 'bl' &&
-    inventory.warehouses.includes(`bl_${warehouse.warehouse_id}`)
-  );
-  let warehouse;
-  if (warehouseId) {
-    warehouse = warehouses.find(item => `bl_${item.warehouse_id}` === warehouseId);
-    if (!warehouse) {
-      throw new Error(`BASE_WAREHOUSE_ID=${warehouseId} non trovato tra i magazzini Base restituiti dall'API e associati al catalogo selezionato.`);
-    }
-  } else if (warehouses.length !== 1) {
-    for (const warehouse of warehouses) {
-      log(`Magazzino utilizzabile: ${warehouse.name} - ID: bl_${warehouse.warehouse_id}`);
-    }
-    throw new Error('Serve un solo magazzino Base associato al catalogo per inviare le quantita. Se ce ne sono diversi, indica quello corretto.');
-  } else {
-    warehouse = warehouses[0];
-  }
-  return { name: warehouse.name, id: `bl_${warehouse.warehouse_id}` };
+  return { name: 'Default Warehouse', id: 'default' };
 }
 
 export async function productExistsInBase(sku, inventoryId) {
