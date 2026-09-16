@@ -1,8 +1,12 @@
-import { token, inventoryId, dryRun } from './config.js';
+import { token, inventoryId, warehouseId, dryRun } from './config.js';
 import { log } from './logger.js';
-import { buildBasePayload } from './products.js';
+import { buildBasePayload, buildBaseUpdatePayload } from './products.js';
 
 export async function callBase(method, parameters = {}) {
+  if (!['true', 'false'].includes(dryRun)) throw new Error('DRY_RUN deve essere true oppure false.');
+  if (dryRun === 'true' && !method.startsWith('get')) {
+    throw new Error(`DRY_RUN: scrittura ${method} bloccata.`);
+  }
   const response = await fetch('https://api.baselinker.com/connector.php', {
     method: 'POST',
     headers: { 'X-BLToken': token },
@@ -32,10 +36,12 @@ export async function getBaseInventory() {
   if (inventoryId) {
     const inventory = data.inventories.find(item => String(item.inventory_id) === inventoryId);
     if (inventory) return inventory;
-    log(`[WARNING] BASE_INVENTORY_ID=${inventoryId} non trovato. Uso il primo catalogo disponibile.`);
+    throw new Error(`BASE_INVENTORY_ID=${inventoryId} non trovato; nessun catalogo alternativo selezionato.`);
   }
 
-  const defaultInventory = data.inventories[0];
+  const defaults = data.inventories.filter(inventory => inventory.is_default === true);
+  if (defaults.length !== 1) throw new Error('Inventory Default non identificabile in modo univoco.');
+  const defaultInventory = defaults[0];
   log(`[DEBUG] Catalogo selezionato automaticamente (default): ${defaultInventory.name} (ID: ${defaultInventory.inventory_id})`);
   return defaultInventory;
 }
@@ -65,27 +71,72 @@ export async function getBasePriceGroup(inventory) {
 }
 
 export async function getBaseWarehouse(inventory) {
-  return { name: 'Default Warehouse', id: 'default' };
+  const data = await callBase('getInventoryWarehouses');
+  if (!Array.isArray(data.warehouses) || !Array.isArray(inventory.warehouses)) {
+    throw new Error('Elenco magazzini non valido.');
+  }
+  const warehouses = data.warehouses.filter(warehouse => warehouse.warehouse_type === 'bl' &&
+    inventory.warehouses.includes(`bl_${warehouse.warehouse_id}`));
+  const candidates = warehouseId
+    ? warehouses.filter(warehouse => `bl_${warehouse.warehouse_id}` === warehouseId)
+    : warehouses;
+  if (candidates.length !== 1) throw new Error('Warehouse non trovato o ambiguo: specificare BASE_WAREHOUSE_ID associato al catalogo.');
+  return { name: candidates[0].name, id: `bl_${candidates[0].warehouse_id}` };
 }
 
 export async function productExistsInBase(sku, inventoryId) {
+  return (await findProductInBase(sku, inventoryId)) !== null;
+}
+
+export async function findProductInBase(sku, inventoryId) {
   if (typeof sku !== 'string' || sku.trim() === '') {
     throw new Error('Controllo duplicati: SKU mancante o non valido.');
   }
   const data = await callBase('getInventoryProductsList', {
     inventory_id: inventoryId,
     filter_sku: sku,
+    include_variants: true,
   });
   if (!data.products || typeof data.products !== 'object') {
     throw new Error('getInventoryProductsList: elenco prodotti non valido.');
   }
-  for (const product of Object.values(data.products)) {
+  let match = null;
+  for (const [key, product] of Object.entries(data.products)) {
     if (!product || typeof product.sku !== 'string') {
       throw new Error('getInventoryProductsList: prodotto senza SKU valido nella risposta.');
     }
-    if (product.sku === sku) return true;
+    if (product.sku !== sku) continue;
+    if (match) throw new Error(`SKU ${sku} ambiguo: piu prodotti presenti nel catalogo.`);
+    const id = Number(product.id ?? product.product_id ?? key);
+    if (!Number.isSafeInteger(id) || id <= 0 || String(id) !== key) {
+      throw new Error('Identita prodotto non valida nella risposta Base.com.');
+    }
+    match = { ...product, product_id: id };
   }
-  return false;
+  return match;
+}
+
+export async function getBaseProductDetails(inventoryId, productId) {
+  const data = await callBase('getInventoryProductsData', { inventory_id: inventoryId, products: [productId] });
+  const product = data.products?.[productId];
+  if (!product || typeof product !== 'object' || Array.isArray(product)) {
+    throw new Error(`Dettagli del prodotto ${productId} mancanti.`);
+  }
+  return product;
+}
+
+export async function updateProductInBase(productId, product, config, existing) {
+  if (!Number.isSafeInteger(Number(productId)) || Number(productId) <= 0) throw new Error('product_id UPDATE non valido.');
+  const details = existing ?? await getBaseProductDetails(config.inventory.inventory_id, productId);
+  const changes = buildBaseUpdatePayload(product, details, config);
+  if (!changes) return null;
+  const payload = { ...changes, product_id: Number(productId) };
+  if (dryRun === 'true') {
+    log(`Payload Base.com (UPDATE):\n${JSON.stringify(payload, null, 2)}`);
+    log('DRY_RUN: nessuna scrittura su Base.com');
+    return null;
+  }
+  return await callBase('addInventoryProduct', payload);
 }
 
 export async function sendProductToBase(product, config) {

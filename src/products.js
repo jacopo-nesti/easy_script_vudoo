@@ -13,7 +13,13 @@ export function parseFeedNumber(value, unit, field) {
   if (typeof value !== 'string' || !value.trim().endsWith(unit)) {
     throw new Error(`${field} deve essere una stringa con unita ${unit}.`);
   }
-  const text = value.trim().slice(0, -unit.length).replace(/\s/g, '').replace(',', '.');
+  let text = value.trim().slice(0, -unit.length).trim();
+  if (text.includes(',')) {
+    if (!/^(?:\d+|\d{1,3}(?:\.\d{3})+),\d+$/.test(text)) {
+      throw new Error(`${field} contiene un numero non valido (${value}).`);
+    }
+    text = text.replace(/\./g, '').replace(',', '.');
+  }
   const number = Number(text);
   if (!/^\d+(\.\d+)?$/.test(text) || !Number.isFinite(number)) {
     throw new Error(`${field} contiene un numero non valido.`);
@@ -87,8 +93,11 @@ export function buildBasePayload(product, config) {
   }
 
   // Aggiunta dell'ID Produttore nel payload se presente
-  if (product.manufacturer_id != null) {
-    payload.manufacturer_id = product.manufacturer_id;
+  for (const field of ['manufacturer_id', 'category_id']) {
+    if (product[field] == null) continue;
+    const id = Number(product[field]);
+    if (!Number.isSafeInteger(id) || id <= 0) throw new Error(`${field} non valido.`);
+    payload[field] = id;
   }
 
   const textFields = {};
@@ -103,7 +112,10 @@ export function buildBasePayload(product, config) {
     payload.prices = { [config.priceGroup.price_group_id]: product.price };
   }
   if (product.quantity != null) {
-    payload.stock = { default: product.quantity };
+    if (!config.warehouse || !/^bl_\d+$/.test(config.warehouse.id)) {
+      throw new Error('Magazzino Base valido mancante per la quantita.');
+    }
+    payload.stock = { [config.warehouse.id]: product.quantity };
   }
   if (product.image_link != null) {
     if (!URL.canParse(product.image_link) || !['http:', 'https:'].includes(new URL(product.image_link).protocol)) {
@@ -112,18 +124,27 @@ export function buildBasePayload(product, config) {
     payload.images = { '0': `url:${product.image_link}` };
   }
   return payload;
-  }
+}
 
-  export function detectAndFilterDuplicates(products) {
+export function detectAndFilterDuplicates(products) {
     const seenSkus = new Set();
     const duplicatesMap = new Map();
     const uniqueProducts = [];
 
     for (const product of products) {
-      const sku = product.id ?? product.sku;
-      if (!sku) continue;
+      const sku = product?.id;
+      if (typeof sku !== 'string' || sku.trim() === '') {
+        uniqueProducts.push(product);
+        continue;
+      }
 
       if (seenSkus.has(sku)) {
+        const first = uniqueProducts.find(item => item?.id === sku);
+        for (const field of ['title', 'description', 'price', 'ean', 'weight', 'quantity', 'image_link', 'brand', 'product_type', 'manufacturer_id', 'category_id']) {
+          if (JSON.stringify(first[field] ?? null) !== JSON.stringify(product[field] ?? null)) {
+            throw new Error(`SKU duplicato ${sku} con valori discordanti: ${field}.`);
+          }
+        }
         const count = duplicatesMap.get(sku) ?? 1;
         duplicatesMap.set(sku, count + 1);
       } else {
@@ -137,4 +158,39 @@ export function buildBasePayload(product, config) {
       duplicatesMap,
       hasDuplicates: duplicatesMap.size > 0
     };
+}
+
+export function buildBaseUpdatePayload(product, existing, config) {
+  if (existing.sku !== product.sku) throw new Error('UPDATE: SKU del dettaglio diverso da quello richiesto.');
+  const desired = buildBasePayload(product, config);
+  const changes = {};
+  for (const field of ['ean', 'weight', 'manufacturer_id', 'category_id']) {
+    if (desired[field] == null) continue;
+    const equal = field === 'ean'
+      ? String(desired[field]) === String(existing[field] ?? '')
+      : existing[field] != null && Number(desired[field]) === Number(existing[field]);
+    if (!equal) changes[field] = desired[field];
+  }
+  for (const field of ['text_fields', 'prices', 'stock']) {
+    const values = {};
+    for (const [key, value] of Object.entries(desired[field] ?? {})) {
+      const current = existing[field]?.[key];
+      const equal = field === 'text_fields'
+        ? String(value) === String(current ?? '')
+        : current != null && Number(value) === Number(current);
+      if (!equal) values[key] = value;
+    }
+    if (Object.keys(values).length) changes[field] = values;
+  }
+  if (desired.images) {
+    const current = existing.images?.['1'];
+    const url = typeof current === 'string' ? current.replace(/^url:/, '') : '';
+    const isBaseImage = URL.canParse(url) && new URL(url).hostname === 'upload.cdn.baselinker.com';
+    if (!isBaseImage && url !== product.image_link) changes.images = desired.images;
+  }
+  return Object.keys(changes).length ? { inventory_id: desired.inventory_id, ...changes } : null;
+}
+
+export function hasProductChanged(product, existing, config) {
+  return buildBaseUpdatePayload(product, existing, config) !== null;
 }

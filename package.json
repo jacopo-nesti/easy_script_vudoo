@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node --env-file=.env index.js",
     "convert": "node convert_xml_to_json.js",
-    "productor": "node productor.js"
+    "productor": "node productor.js",
+    "test": "node --experimental-vm-modules --test tests/integration-review.test.js"
   },
   "engines": {
     "node": ">=22"
