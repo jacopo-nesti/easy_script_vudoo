@@ -58,7 +58,6 @@ export async function getBaseWarehouse(inventory) {
   return { name: 'Default Warehouse', id: 'default' };
 }
 
-// Cerca il prodotto e restituisce l'ID Base.com se esiste, altrimenti null
 export async function getBaseProductIdBySku(sku, inventoryId) {
   if (!sku || typeof sku !== 'string' || sku.trim() === '') {
     return null;
@@ -78,7 +77,6 @@ export async function getBaseProductIdBySku(sku, inventoryId) {
     return null;
   }
 
-  // Trova la corrispondenza esatta per SKU e restituisce l'ID del prodotto
   const match = productsList.find(([_, p]) => p && p.sku && p.sku.trim() === sku.trim());
   return match ? match[0] : null;
 }
@@ -86,16 +84,16 @@ export async function getBaseProductIdBySku(sku, inventoryId) {
 export async function sendProductToBase(product, config, existingProductId = null) {
   const payload = buildBasePayload(product, config);
 
+  if (existingProductId) {
+    payload.product_id = existingProductId;
+  }
+
+  log(`[DEBUG PAYLOAD] Sending category_id: ${payload.category_id ?? 'nessuna'} per SKU: ${payload.sku}`);
+
   if (dryRun === 'true') {
     log(`[DRY_RUN] Payload Base.com:\n${JSON.stringify(payload, null, 2)}`);
     return null;
   }
 
-  // Se il prodotto esiste già, aggiornalo. Altrimenti crealo da zero.
-  if (existingProductId) {
-    payload.product_id = existingProductId;
-    return await callBase('addInventoryProduct', payload); // Base.com usa addInventoryProduct con product_id per aggiornare
-  } else {
-    return await callBase('addInventoryProduct', payload);
-  }
+  return await callBase('addInventoryProduct', payload);
 }

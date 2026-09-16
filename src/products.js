@@ -89,9 +89,10 @@ export function buildBasePayload(product, config) {
     payload.manufacturer_id = product.manufacturer_id;
   }
 
-  // Aggiunta ID Categoria convertito in numero
-  if (product.category_id != null && Number(product.category_id) > 0) {
-    payload.category_id = Number(product.category_id);
+  // Forza il casting a intero del category_id per l'API di Base.com
+  const parsedCategoryId = parseInt(product.category_id, 10);
+  if (!isNaN(parsedCategoryId) && parsedCategoryId > 0) {
+    payload.category_id = parsedCategoryId;
   }
 
   const textFields = {};
