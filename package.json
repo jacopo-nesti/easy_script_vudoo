@@ -4,10 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node --env-file=.env index.js",
+    "start": "node --env-file=.env cli.js",
+    "import": "node --env-file=.env index.js",
+    "sync": "node --env-file=.env sync.js",
     "convert": "node convert_xml_to_json.js",
     "productor": "node productor.js",
-    "test": "node --experimental-vm-modules --test tests/integration-review.test.js"
+    "test": "node --experimental-vm-modules --test tests/integration-review.test.js tests/cli.test.js"
   },
   "engines": {
     "node": ">=22"
