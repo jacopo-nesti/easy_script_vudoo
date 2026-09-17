@@ -1,3 +1,4 @@
+import { getCategories, getOrCreateCategory } from './categories.js';
 import { token, inventoryId, testMode, dryRun } from './src/config.js';
 import { log } from './src/logger.js';
 import { getBaseInventory, getBasePriceGroup, getBaseWarehouse, sendProductToBase, findProductInBase, getBaseProductDetails, updateProductInBase } from './src/baseApi.js';
@@ -6,6 +7,7 @@ import { getManufacturerMap, ensureManufacturer } from './src/manufacturers.js';
 import { getCategoryMap, ensureCategoryPath } from './src/categories.js';
 
 async function main() {
+  let ambiguous = 0;
   log('[DEBUG] Avvio script');
   log(`[DEBUG] BASE_INVENTORY_ID letto: ${inventoryId || '(non specificato)'}`);
   if (!token) throw new Error('BASE_API_TOKEN mancante nel file .env.');
@@ -20,6 +22,7 @@ async function main() {
   let created = 0;
   let updated = 0;
   let simulated = 0;
+  let imported = 0;
   let selectedCount = 0;
   let errors = 0;
   let feedDuplicates = 0;
@@ -36,7 +39,6 @@ async function main() {
     config.priceGroup = await getBasePriceGroup(config.inventory);
     log(`[DEBUG] Gruppo prezzi selezionato: ${config.priceGroup.name} (${config.priceGroup.price_group_id})`);
 
-    // RECUPERO PRODUTTORI DA BASE.COM
     stage = 'recupero produttori';
     const mfgMap = await getManufacturerMap();
 
@@ -70,10 +72,9 @@ async function main() {
       ? await getCategoryMap(config.inventory.inventory_id) : new Map();
 
     for (const sourceProduct of selected) {
-      processed++;
-      log(`\nImportazione ${sourceProduct?.id ?? '(SKU assente)'}...`);
       try {
-        const product = normalizeProduct(sourceProduct);
+        processed++;
+        log(`\nImportazione ${sourceProduct?.id ?? '(SKU assente)'}...`);
 
         buildBasePayload(product, config);
         const existingProduct = await findProductInBase(product.sku, config.inventory.inventory_id);
@@ -145,7 +146,9 @@ async function main() {
     if (errorSkus.length) log(`SKU con errori: ${errorSkus.join(', ')}`);
     if (errors > 0) process.exitCode = 1;
   }
+  if (errors > 0) process.exitCode = 1;
 }
+
 
 main().catch(error => {
   log(`ERROR: ${error.message}`);
