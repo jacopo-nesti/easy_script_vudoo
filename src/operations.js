@@ -1,39 +1,94 @@
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { log } from './logger.js';
+import { runPreflightCheck } from './preflight.js';
+import { convertXmlToJson } from './converter.js';
 
-const root = fileURLToPath(new URL('../', import.meta.url));
-const operations = {
-  convert: { label: 'CONVERT', args: ['convert_xml_to_json.js'] },
-  productor: { label: 'PRODUCTOR', args: ['productor.js'] },
-  import: { label: 'IMPORT', args: ['--env-file=.env', 'index.js'] },
-  test: { label: 'TEST', args: ['--experimental-vm-modules', '--test', 'tests/integration-review.test.js', 'tests/cli.test.js'] },
-};
-
-export async function runOperation(name) {
-  if (name === 'sync') {
-    log('[SYNC] Avvio conversione e importazione');
-    const conversionCode = await runOperation('convert');
-    if (conversionCode !== 0) {
-      log('[SYNC] ERRORE: conversione fallita, importazione non avviata');
-      return conversionCode;
-    }
-    const importCode = await runOperation('import');
-    log(importCode === 0 ? '[SYNC] Completata' : '[SYNC] ERRORE: importazione fallita');
-    return importCode;
-  }
-
-  const operation = operations[name];
-  if (!operation) throw new Error('Operazione non riconosciuta');
-  log(`[${operation.label}] Avvio`);
-  const code = await new Promise(resolve => {
-    const child = spawn(process.execPath, operation.args, { cwd: root, stdio: ['ignore', 'inherit', 'inherit'] });
+function executeScript(scriptPath) {
+  return new Promise(resolve => {
+    const child = spawn(process.execPath, ['--env-file=.env', scriptPath], {
+      stdio: 'inherit',
+      env: process.env,
+    });
     child.once('error', error => {
-      log(`[${operation.label}] ERRORE avvio: ${error.message}`);
+      log(`[OPERATIONS] Impossibile avviare ${scriptPath}: ${error.message}`);
       resolve(1);
     });
-    child.once('close', (exitCode, signal) => resolve(exitCode ?? (signal === 'SIGINT' ? 130 : 1)));
+    child.once('close', code => resolve(code ?? 1));
   });
-  log(code === 0 ? `[${operation.label}] Completata` : `[${operation.label}] ERRORE: codice ${code}`);
-  return code;
+}
+
+export async function runOperation(name) {
+  if (name === 'convert') {
+    try {
+      log('\n[CONVERT] Avvio conversione XML → JSON...');
+      await convertXmlToJson();
+      log('[CONVERT] Conversione completata con successo! ✅');
+      return 0;
+    } catch (error) {
+      log(`\n❌ ERRORE CONVERSIONE: ${error.message}`);
+      return 1;
+    }
+  }
+
+  if (name === 'preflight') {
+    try {
+      await runPreflightCheck();
+      return 0;
+    } catch (error) {
+      log(`\n❌ ERRORE PREFLIGHT: ${error.message}`);
+      return 1;
+    }
+  }
+
+  if (name === 'sync') {
+    log('\n=== ESECUZIONE FLUSSO COMPLETO ===\n');
+
+    log('--- Step 1: Conversione XML → JSON ---');
+    try {
+      await convertXmlToJson();
+      log('[CONVERT] Conversione completata con successo! ✅');
+    } catch (error) {
+      log(`[SYNC] Conversione XML fallita: ${error.message}`);
+      return 1;
+    }
+
+    log('\n--- Step 2: Preflight Check ---');
+    try {
+      await runPreflightCheck();
+    } catch (error) {
+      log(`\n❌ ERRORE PREFLIGHT: ${error.message}`);
+      return 1;
+    }
+
+    log('\n--- Step 3: Importazione / Aggiornamento prodotti ---');
+    return await executeScript(fileURLToPath(new URL('../index.js', import.meta.url)));
+  }
+
+  if (name === 'test') {
+    const test1 = fileURLToPath(new URL('../tests/integration-review.test.js', import.meta.url));
+    const test2 = fileURLToPath(new URL('../tests/cli.test.js', import.meta.url));
+
+    return await new Promise(resolve => {
+      const child = spawn(process.execPath, ['--experimental-vm-modules', '--test', test1, test2], {
+        stdio: 'inherit',
+        env: process.env,
+        windowsHide: true
+      });
+      child.once('error', error => {
+        log(`[TEST] Impossibile avviare i test: ${error.message}`);
+        resolve(1);
+      });
+      child.once('close', code => resolve(code ?? 1));
+    });
+  }
+
+  const scripts = {
+    productor: '../productor.js',
+    import: '../index.js'
+  };
+
+  const relativePath = scripts[name];
+  if (!relativePath) throw new Error(`Operazione non valida: ${name}`);
+  return await executeScript(fileURLToPath(new URL(relativePath, import.meta.url)));
 }
