@@ -22,6 +22,7 @@ async function main() {
   let updated = 0;
   let skipped = 0;
   let simulated = 0;
+  let imported = 0;
   let selectedCount = 0;
   let errors = 0;
   const errorSkus = [];
