@@ -85,6 +85,14 @@ Avvio dello script:
 npm start
 ```
 
+Smoke test read-only su Base.com (verifica connessione, inventory e gruppo prezzi predefiniti):
+
+```bash
+npm run test:base
+```
+
+> **Attenzione:** questo comando esegue chiamate reali alle API Base.com e quindi consuma richieste disponibili. Non deve mai eseguire scritture (CREATE/UPDATE), ma e comunque soggetto al rate limit delle API. Evitare di eseguirlo ripetutamente in breve tempo.
+
 **Per la procedura completa di configurazione e utilizzo consulta [GUIDA.md](docs/GUIDA.md).**
 
 ## Evoluzione prevista

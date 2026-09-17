@@ -9,7 +9,8 @@
     "sync": "node --env-file=.env sync.js",
     "convert": "node convert_xml_to_json.js",
     "productor": "node productor.js",
-    "test": "node --experimental-vm-modules --test tests/integration-review.test.js tests/cli.test.js"
+    "test": "node --experimental-vm-modules --test tests/integration-review.test.js tests/cli.test.js",
+    "test:base": "node --env-file=.env tests/smoke-base.mjs"
   },
   "engines": {
     "node": ">=22"
