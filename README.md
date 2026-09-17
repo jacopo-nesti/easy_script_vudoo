@@ -22,6 +22,8 @@ convert_xml_to_json.js
     ↓
 real_products.json
     ↓
+CLI (cli.js) / Sync (sync.js)
+    ↓
 Normalizzazione dati
     ↓
 Controllo SKU / duplicati

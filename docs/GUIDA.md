@@ -11,7 +11,7 @@ convert_xml_to_json.js
         ↓
 real_products.json
         ↓
-index.js
+CLI (cli.js) / Sync (sync.js)
         ↓
 API Base.com
         ↓
