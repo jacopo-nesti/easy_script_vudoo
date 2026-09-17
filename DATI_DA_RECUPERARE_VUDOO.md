@@ -10,11 +10,11 @@ Panel Vudoo → Gestione prodotti → Informazioni di base
 
 Dati necessari:
 
-- Altezza
+- Altezza   
 - Lunghezza
 - Larghezza
 - Aliquota IVA
-- `Max_Qty` — quantità disponibile alla vendita
+- `Max_Qty` — quantità disponibile alla vendita - default su 10 unità
 - Titolo
 - Sottotitolo
 - Bullet Points
@@ -32,8 +32,8 @@ Panel Vudoo → Gestione prodotti → Marketplace
 
 Dati necessari:
 
-- Giorni per la spedizione
-- Pezzi per confezione
+- Giorni per la spedizione   - default 5 giorni di spedizione 
+- Pezzi per confezione   non importa
 
 ---
 
