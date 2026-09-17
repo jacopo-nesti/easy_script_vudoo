@@ -103,8 +103,7 @@ export function buildBasePayload(product, config) {
     payload.prices = { [config.priceGroup.price_group_id]: product.price };
   }
   if (product.quantity != null) {
-    if (!config.warehouse) throw new Error('Magazzino mancante per la quantita.');
-    payload.stock = { [config.warehouse.id]: product.quantity };
+    payload.stock = { default: product.quantity };
   }
   if (product.image_link != null) {
     if (!URL.canParse(product.image_link) || !['http:', 'https:'].includes(new URL(product.image_link).protocol)) {
@@ -113,4 +112,29 @@ export function buildBasePayload(product, config) {
     payload.images = { '0': `url:${product.image_link}` };
   }
   return payload;
+  }
+
+  export function detectAndFilterDuplicates(products) {
+    const seenSkus = new Set();
+    const duplicatesMap = new Map();
+    const uniqueProducts = [];
+
+    for (const product of products) {
+      const sku = product.id ?? product.sku;
+      if (!sku) continue;
+
+      if (seenSkus.has(sku)) {
+        const count = duplicatesMap.get(sku) ?? 1;
+        duplicatesMap.set(sku, count + 1);
+      } else {
+        seenSkus.add(sku);
+        uniqueProducts.push(product);
+      }
+    }
+
+    return {
+      uniqueProducts,
+      duplicatesMap,
+      hasDuplicates: duplicatesMap.size > 0
+    };
 }

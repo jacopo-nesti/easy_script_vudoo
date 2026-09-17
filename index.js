@@ -18,18 +18,20 @@ async function main() {
   const config = {};
   let read = 0;
   let processed = 0;
-  let imported = 0;
+  let created = 0;
+  let updated = 0;
   let skipped = 0;
   let simulated = 0;
   let selectedCount = 0;
   let errors = 0;
+  const errorSkus = [];
   let stage = 'getInventories';
   let warehouseStatus = 'non selezionato';
 
   try {
     config.inventory = await getBaseInventory();
     log(`[DEBUG] Inventory selezionato: ${config.inventory.name} (${config.inventory.inventory_id})`);
-    
+
     stage = 'recupero gruppo prezzi';
     log('[DEBUG] Recupero gruppo prezzi');
     config.priceGroup = await getBasePriceGroup(config.inventory);
@@ -104,13 +106,14 @@ async function main() {
           simulated++;
           continue;
         }
-        imported++;
+        created++;
         log(`SUCCESS - product_id: ${result.product_id}`);
         if (result.warnings && Object.keys(result.warnings).length > 0) {
           log(`Avvisi Base.com: ${JSON.stringify(result.warnings)}`);
         }
       } catch (error) {
         errors++;
+        errorSkus.push(sourceProduct?.id ?? 'sconosciuto');
         log(`ERROR: ${error.message}`);
       }
     }
@@ -123,7 +126,19 @@ async function main() {
     log(`\nInventory: ${inventory ? `${inventory.name} (${inventory.inventory_id})` : 'non selezionato'}`);
     log(`Gruppo prezzi: ${priceGroup ? `${priceGroup.name} (${priceGroup.price_group_id}, ${priceGroup.currency})` : 'non selezionato'}`);
     log(`Warehouse: ${warehouse ? `${warehouse.name} (${warehouse.id})` : warehouseStatus}`);
-    log(`Prodotti letti: ${read}\nProdotti selezionati: ${selectedCount}\nProdotti processati: ${processed}\nImportati: ${imported}\nSaltati perché già presenti: ${skipped}\nSimulati: ${simulated}\nErrori: ${errors}`);
+    log(`\n=== RIEPILOGO FINALE ===`);
+    log(`Prodotti letti: ${read}`);
+    log(`Prodotti selezionati: ${selectedCount}`);
+    log(`Prodotti processati: ${processed}`);
+    log(``);
+    log(`Creati: ${created}`);
+    log(`Aggiornati: ${updated}`);
+    log(`Già presenti: ${skipped}`);
+    log(`Simulati: ${simulated}`);
+    log(`Errori: ${errors}`);
+    if (errorSkus.length > 0) {
+      log(`SKU con errori: ${errorSkus.join(', ')}`);
+    }
     if (errors > 0) process.exitCode = 1;
   }
 }
@@ -131,4 +146,8 @@ async function main() {
 main().catch(error => {
   log(`ERROR: ${error.message}`);
   process.exitCode = 1;
+<<<<<<< HEAD
 });
+=======
+});
+>>>>>>> main
