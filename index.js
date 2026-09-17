@@ -122,29 +122,30 @@ async function main() {
     errors++;
     log(`ERROR ${stage}: ${error.message}`);
   } finally {
-    log(`Prodotti letti: ${read} | Selezionati: ${selectedCount} | Processati: ${processed} | Importati: ${imported} | Saltati: ${skipped} | Bloccati/Ambigni: ${ambiguous} | Errori: ${errors}`);
-    const { inventory, priceGroup, warehouse } = config;
-    log(`\nInventory: ${inventory ? `${inventory.name} (${inventory.inventory_id})` : 'non selezionato'}`);
-    log(`Gruppo prezzi: ${priceGroup ? `${priceGroup.name} (${priceGroup.price_group_id}, ${priceGroup.currency})` : 'non selezionato'}`);
-    log(`Warehouse: ${warehouse ? `${warehouse.name} (${warehouse.id})` : warehouseStatus}`);
-    log(`\n=== RIEPILOGO FINALE ===`);
-    log(`Prodotti letti: ${read}`);
-    log(`Prodotti selezionati: ${selectedCount}`);
-    log(`Prodotti processati: ${processed}`);
-    log(``);
-    log(`Creati: ${created}`);
-    log(`Aggiornati: ${updated}`);
-    log(`Già presenti: ${skipped}`);
-    log(`Simulati: ${simulated}`);
-    log(`Errori: ${errors}`);
-    if (errorSkus.length > 0) {
-      log(`SKU con errori: ${errorSkus.join(', ')}`);
-    }
-    if (errors > 0) process.exitCode = 1;
+  log(`Prodotti letti: ${read} | Selezionati: ${selectedCount} | Processati: ${processed} | Importati: ${imported} | Saltati: ${skipped} | Bloccati/Ambigui: ${ambiguous} | Errori: ${errors}`);
+  const { inventory, priceGroup, warehouse } = config;
+  log(`\nInventory: ${inventory ? `${inventory.name} (${inventory.inventory_id})` : 'non selezionato'}`);
+  log(`Gruppo prezzi: ${priceGroup ? `${priceGroup.name} (${priceGroup.price_group_id}, ${priceGroup.currency})` : 'non selezionato'}`);
+  log(`Warehouse: ${warehouse ? `${warehouse.name} (${warehouse.id})` : warehouseStatus}`);
+  log(`\n=== RIEPILOGO FINALE ===`);
+  log(`Prodotti letti: ${read}`);
+  log(`Prodotti selezionati: ${selectedCount}`);
+  log(`Prodotti processati: ${processed}`);
+  log(``);
+  log(`Creati: ${created}`);
+  log(`Aggiornati: ${updated}`);
+  log(`Già presenti: ${skipped}`);
+  log(`Simulati: ${simulated}`);
+  log(`Errori: ${errors}`);
+  if (errorSkus.length > 0) {
+    log(`SKU con errori: ${errorSkus.join(', ')}`);
   }
+  if (errors > 0) process.exitCode = 1;
 }
+
 
 main().catch(error => {
   log(`ERROR: ${error.message}`);
   process.exitCode = 1;
 });
+}

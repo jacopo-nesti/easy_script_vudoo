@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "node --env-file=.env index.js",
+    "test": "node --check index.js",
     "convert": "node convert_xml_to_json.js",
     "productor": "node productor.js"
   },
