@@ -96,7 +96,7 @@ export async function sendProductToBase(product, config) {
     return null;
   }
   return await callBase('addInventoryProduct', payload);
-<<<<<<< HEAD
+
 }
 export async function checkSkuStatus(sku, inventoryId) {
   const response = await callBase('getInventoryProductsList', {
@@ -125,6 +125,4 @@ export async function checkSkuStatus(sku, inventoryId) {
     count: matches.length,
     productIds: matches.map(p => p.id)
   };
-=======
->>>>>>> main
 }
