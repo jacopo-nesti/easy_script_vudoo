@@ -146,8 +146,4 @@ async function main() {
 main().catch(error => {
   log(`ERROR: ${error.message}`);
   process.exitCode = 1;
-<<<<<<< HEAD
 });
-=======
-});
->>>>>>> main
