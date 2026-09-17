@@ -29,17 +29,18 @@ async function main() {
     3: 'productor',
     4: 'import',
     5: 'sync',
-    6: 'test'
+    6: 'test',
+    0: 'check'
   };
 
   while (true) {
-    log(`\n================================\nVUDOO → BASE.COM\n================================\nDRY_RUN: ${mode(dryRun)}\nTEST_MODE: ${mode(testMode)}\n\n1. Converti XML → JSON\n2. Esegui controlli preliminari (Preflight Check)\n3. Sincronizza produttori\n4. Importa / aggiorna prodotti su Base.com\n5. Esegui flusso completo\n6. Esegui test automatici\n7. Esci`);
+    log(`\n================================\nVUDOO → BASE.COM\n================================\nDRY_RUN: ${mode(dryRun)}\nTEST_MODE: ${mode(testMode)}\n\n0. Verifica ambiente e configurazione (Check)\n1. Converti XML → JSON\n2. Esegui controlli preliminari (Preflight Check)\n3. Sincronizza produttori\n4. Importa / aggiorna prodotti su Base.com\n5. Esegui flusso completo\n6. Esegui test automatici\n7. Esci`);
     const choice = await ask('Seleziona operazione: ');
     if (choice === null || choice === '7') return;
 
     let operation = Object.hasOwn(choices, choice) ? choices[choice] : null;
     if (!operation) {
-      log('Scelta non valida. Seleziona un numero da 1 a 7.');
+      log('Scelta non valida. Seleziona un numero da 0 a 7.');
       continue;
     }
 

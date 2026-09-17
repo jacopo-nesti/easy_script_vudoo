@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { log } from './logger.js';
 import { runPreflightCheck } from './preflight.js';
 import { convertXmlToJson } from './converter.js';
+import { runEnvironmentCheck } from './checker.js';
 
 function executeScript(scriptPath) {
   return new Promise(resolve => {
@@ -14,11 +15,23 @@ function executeScript(scriptPath) {
       log(`[OPERATIONS] Impossibile avviare ${scriptPath}: ${error.message}`);
       resolve(1);
     });
-    child.once('close', code => resolve(code ?? 1));
+    child.once('close', code => {
+      const exitCode = code !== 0 ? (code ?? 1) : 0;
+      resolve(exitCode);
+    });
   });
 }
 
 export async function runOperation(name) {
+  if (name === 'check') {
+    try {
+      return await runEnvironmentCheck();
+    } catch (error) {
+      log(`\n❌ ERRORE DIAGNOSTICA: ${error.message}`);
+      return 1;
+    }
+  }
+
   if (name === 'convert') {
     try {
       log('\n[CONVERT] Avvio conversione XML → JSON...');
@@ -62,7 +75,12 @@ export async function runOperation(name) {
     }
 
     log('\n--- Step 3: Importazione / Aggiornamento prodotti ---');
-    return await executeScript(fileURLToPath(new URL('../index.js', import.meta.url)));
+    const importCode = await executeScript(fileURLToPath(new URL('../index.js', import.meta.url)));
+    if (importCode !== 0) {
+      log(`[SYNC] Importazione fallita con codice: ${importCode}`);
+      return importCode;
+    }
+    return 0;
   }
 
   if (name === 'test') {

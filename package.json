@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "node --env-file=.env cli.js",
+    "check": "node --env-file=.env check.js",
     "import": "node --env-file=.env index.js",
     "sync": "node --env-file=.env sync.js",
     "convert": "node convert_xml_to_json.js",
