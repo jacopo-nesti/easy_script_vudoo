@@ -1,0 +1,56 @@
+commit 79ed6bfaf0defe2f3b69539b539e6280aabbee93
+Author: WoodTrue <helcamfer@gmail.com>
+Date:   Wed Sep 16 12:25:02 2026 +0200
+
+    Fix Italian thousands separator in parseFeedNumber
+
+A	.history/.env_20260916095621.example
+A	.history/.env_20260916095718.example
+A	.history/.env_20260916095720
+A	.history/.env_20260916095721.example
+A	.history/.env_20260916100555
+A	.history/.env_20260916100557
+A	.history/.env_20260916101023
+A	.history/.env_20260916101025
+A	.history/.env_20260916101026
+A	.history/.env_20260916114046
+A	.history/.env_20260916114048
+A	.history/.env_20260916114050
+A	.history/.env_20260916114054
+A	.history/.env_20260916114104
+A	.history/.env_20260916114124
+A	.history/.env_20260916114517
+A	.history/.env_20260916114519
+A	.history/.env_20260916114525
+
+commit 8cffaedcce7ece16f8fe2a069c1beef1dffaf480
+Author: Jacopo Nesti <jacopo.nesti95@gmail.com>
+Date:   Thu Sep 10 21:54:56 2026 +0200
+
+    Update documentation and secure environment configuration
+
+D	.env
+
+commit 3929b2f1c06cb5d8cb79432535eb79202ac74674
+Author: Jacopo Nesti <jacopo.nesti95@gmail.com>
+Date:   Thu Sep 10 15:19:02 2026 +0200
+
+    update convertor for showing correct sku number, tax and brand on title in json structure
+
+M	.env
+
+commit 7982251533a702796621db86666502efee7259c6
+Author: Jacopo Nesti <jacopo.nesti95@gmail.com>
+Date:   Thu Sep 10 14:04:34 2026 +0200
+
+    create readme for run the script
+
+M	.env
+
+commit b262c69d47bb647c263489039420649110913826
+Author: Jacopo Nesti <jacopo.nesti95@gmail.com>
+Date:   Thu Sep 10 12:25:33 2026 +0200
+
+    first commit
+
+A	.env
