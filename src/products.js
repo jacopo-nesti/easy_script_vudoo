@@ -79,10 +79,40 @@ export function normalizeProduct(source) {
       normalized.shipping.price = parseFeedNumber(source.shipping.price, 'EUR', 'shipping.price');
     }
   }
-  if (source.quantity != null &&
-    (typeof source.quantity !== 'number' || !Number.isFinite(source.quantity) || source.quantity < 0)) {
-    throw new Error('quantity deve essere un numero maggiore o uguale a zero.');
+
+  // +++ Gestione Quantità e Fallback Disponibilità +++
+  if (source.quantity != null) {
+    if (typeof source.quantity === 'number') {
+      if (!Number.isFinite(source.quantity) || source.quantity < 0) {
+        throw new Error('quantity deve essere un numero maggiore o uguale a zero.');
+      }
+      normalized.quantity = source.quantity;
+    } else if (typeof source.quantity === 'string') {
+      const val = source.quantity.trim().toLowerCase();
+      if (val === 'in stock' || val === 'disponibile') {
+        normalized.quantity = 10;
+      } else if (val === 'out of stock' || val === 'non disponibile') {
+        normalized.quantity = 0;
+      } else {
+        const parsed = Number(val);
+        if (Number.isFinite(parsed) && parsed >= 0) {
+          normalized.quantity = parsed;
+        } else {
+          throw new Error('quantity deve essere un numero maggiore o uguale a zero.');
+        }
+      }
+    } else {
+      throw new Error('quantity deve essere un numero maggiore o uguale a zero.');
+    }
+  } else if (source.availability != null) {
+    const avail = String(source.availability).trim().toLowerCase();
+    if (avail === 'in stock' || avail === 'disponibile') {
+      normalized.quantity = 10;
+    } else if (avail === 'out of stock' || avail === 'non disponibile') {
+      normalized.quantity = 0;
+    }
   }
+
   return normalized;
 }
 
@@ -100,7 +130,6 @@ export function buildBasePayload(product, config) {
     if (product[field] != null) payload[field] = product[field];
   }
 
-  // Aggiunta dell'ID Produttore nel payload se presente
   for (const field of ['manufacturer_id', 'category_id']) {
     if (product[field] == null) continue;
     const id = Number(product[field]);
