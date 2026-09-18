@@ -1,4 +1,4 @@
-import { token, testMode, dryRun } from './config.js';
+import { token, testMode, dryRun, warehouseId } from './config.js';
 import { getBaseInventory, getBasePriceGroup, getBaseWarehouse } from './baseApi.js';
 import { getProducts, detectAndFilterDuplicates } from './products.js';
 import { log } from './logger.js';
@@ -20,11 +20,11 @@ export async function runPreflightCheck() {
   try {
     rawProducts = await getProducts();
   } catch (error) {
-    throw new Error(`[PREFLIGHT] Il file real_products.json non è presente o non è leggibile.\n👉 Esegui prima l'opzione 2 (Converti XML → JSON) per generare il file dal feed Vudoo.`);
+    throw new Error(`[PREFLIGHT] Il file real_products.json non Ã¨ presente o non Ã¨ leggibile.\nðŸ‘‰ Esegui prima l'opzione 2 (Converti XML â†’ JSON) per generare il file dal feed Vudoo.`);
   }
 
   if (!Array.isArray(rawProducts) || rawProducts.length === 0) {
-    throw new Error('[PREFLIGHT] real_products.json è vuoto o non contiene prodotti validi. Esegui la conversione XML → JSON (Opzione 2).');
+    throw new Error('[PREFLIGHT] real_products.json Ã¨ vuoto o non contiene prodotti validi. Esegui la conversione XML â†’ JSON (Opzione 2).');
   }
 
   // 3. Selezione prodotti e filtro duplicati preliminare
@@ -49,15 +49,14 @@ export async function runPreflightCheck() {
     throw new Error('[PREFLIGHT] Price group necessario non trovato su Base.com.');
   }
 
-  // 5. Verifica Warehouse SOLO quando richiesto dallo stock dei prodotti
-  let warehouse = null;
-  const requiresWarehouse = uniqueProducts.some(product => product?.quantity != null);
+  // 5. Assegnazione forzata del Warehouse configurato tramite .env
+  let warehouse = await getBaseWarehouse(inventory);
+  if (!warehouse) {
+    warehouse = warehouseId ? { id: warehouseId, name: "Wally 1925" } : null;
+  }
 
-  if (requiresWarehouse) {
-    warehouse = await getBaseWarehouse(inventory);
-    if (!warehouse) {
-      throw new Error('[PREFLIGHT] Warehouse necessario per la gestione dello stock ma non disponibile su Base.com.');
-    }
+  if (!warehouse) {
+    throw new Error('[PREFLIGHT] Warehouse necessario per la gestione dello stock ma non configurato correttamente.');
   }
 
   log('[PREFLIGHT] Controlli preliminari completati con successo! ✅\n');

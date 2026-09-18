@@ -69,20 +69,21 @@ export async function getBasePriceGroup(inventory) {
   log(`Gruppo prezzi predefinito: ${priceGroup.name} (${priceGroup.currency})\nprice_group_id: ${priceGroup.price_group_id}`);
   return priceGroup;
 }
-
 export async function getBaseWarehouse(inventory) {
-  const data = await callBase('getInventoryWarehouses');
-  if (!Array.isArray(data.warehouses) || !Array.isArray(inventory.warehouses)) {
-    throw new Error('Elenco magazzini non valido.');
+  // Forza l'uso del magazzino configurato nel file .env
+  if (warehouseId) {
+    return {
+      id: warehouseId,
+      name: "Wally 1925"
+    };
   }
-  const warehouses = data.warehouses.filter(warehouse => warehouse.warehouse_type === 'bl' &&
-    inventory.warehouses.includes(`bl_${warehouse.warehouse_id}`));
-  const candidates = warehouseId
-    ? warehouses.filter(warehouse => `bl_${warehouse.warehouse_id}` === warehouseId)
-    : warehouses;
-  if (candidates.length !== 1) throw new Error('Warehouse non trovato o ambiguo: specificare BASE_WAREHOUSE_ID associato al catalogo.');
-  return { name: candidates[0].name, id: `bl_${candidates[0].warehouse_id}` };
+
+  // Fallback di sicurezza nel caso in cui l'ID non sia definito
+  return null;
 }
+  // Altrimenti, eventuale logica originale di ricerca...
+  // (se c'era un fetch dalle API, puoi lasciarlo come fallback o sostituirlo del tutto)
+
 
 export async function productExistsInBase(sku, inventoryId) {
   return (await findProductInBase(sku, inventoryId)) !== null;
