@@ -20,11 +20,11 @@ export async function runPreflightCheck() {
   try {
     rawProducts = await getProducts();
   } catch (error) {
-    throw new Error(`[PREFLIGHT] Il file real_products.json non Ã¨ presente o non Ã¨ leggibile.\nðŸ‘‰ Esegui prima l'opzione 2 (Converti XML â†’ JSON) per generare il file dal feed Vudoo.`);
+    throw new Error(`[PREFLIGHT] Il file real_products.json non è presente o non è leggibile.`);
   }
 
   if (!Array.isArray(rawProducts) || rawProducts.length === 0) {
-    throw new Error('[PREFLIGHT] real_products.json Ã¨ vuoto o non contiene prodotti validi. Esegui la conversione XML â†’ JSON (Opzione 2).');
+    throw new Error('[PREFLIGHT] real_products.json è vuoto o non contiene prodotti validi.');
   }
 
   // 3. Selezione prodotti e filtro duplicati preliminare
@@ -49,14 +49,21 @@ export async function runPreflightCheck() {
     throw new Error('[PREFLIGHT] Price group necessario non trovato su Base.com.');
   }
 
-  // 5. Assegnazione forzata del Warehouse configurato tramite .env
+  // 5. Gestione Warehouse post-normalizzazione / controllo stock prodotti
   let warehouse = await getBaseWarehouse(inventory);
   if (!warehouse) {
     warehouse = warehouseId ? { id: warehouseId, name: "Wally 1925" } : null;
   }
 
-  if (!warehouse) {
-    throw new Error('[PREFLIGHT] Warehouse necessario per la gestione dello stock ma non configurato correttamente.');
+  // Verifica se i prodotti richiedono il magazzino (gestendo quantità null, "" o stock)
+  const requiresWarehouse = uniqueProducts.some(product => {
+    const qty = product?.quantity;
+    const stockStatus = product?.stock_status; // o equivalente flag di disponibilità
+    return (qty !== null && qty !== undefined && qty !== '') || stockStatus === 'in stock';
+  });
+
+  if (requiresWarehouse && !warehouse) {
+    throw new Error('[PREFLIGHT] Warehouse necessario per la gestione dello stock ma non disponibile o configurato.');
   }
 
   log('[PREFLIGHT] Controlli preliminari completati con successo! ✅\n');
