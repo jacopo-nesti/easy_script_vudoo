@@ -212,3 +212,14 @@ Base.com
 ```
 
 L'obiettivo è ridurre progressivamente gli interventi manuali e mantenere sincronizzati i cataloghi Vudoo e Base.com.
+
+## Limitazioni Note e Issue Aperte (v1.1.0)
+
+Durante i test e l'utilizzo della versione `v1.1.0` sono emerse alcune limitazioni strutturali e architetturali che verranno affrontate nei prossimi rilasci:
+
+* **Rate Limit API Base.com:** Durante l'importazione massiva dell'intero catalogo è stato concretamente raggiunto il limite di richieste consentite dalle API di Base.com. È necessario implementare logiche di limitazione della velocità (*rate limiting/throttling*) e di attesa/ripresa (*backoff*) nel client delle chiamate.
+* **Esiti incerti delle scritture:** Gestione dei riscontri asincroni o parziali restituiti dalle API in caso di carichi elevati.
+* **Sincronizzazione stock:** Attualmente disattivata o basata su logiche preliminari in attesa di dati numerici stabili dal fornitore.
+* **Gestione immagini:** Ottimizzazione del caricamento e del linking delle risorse multimediali remote.
+* **Connessione diretta API Vudoo:** Sostituzione dell'attuale tracciato XML statico con chiamate live dirette al gestionale Vudoo.
+* **Cleanup dei file legacy:** Pulizia e rimozione programmata dei file di transito locali (es. dump intermedi non necessari).
