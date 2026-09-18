@@ -80,36 +80,45 @@ export function normalizeProduct(source) {
     }
   }
 
-  // +++ Gestione Quantità e Fallback Disponibilità +++
-  if (source.quantity !== undefined && source.quantity !== null && source.quantity !== '') {
-    if (typeof source.quantity === 'number') {
-      if (!Number.isFinite(source.quantity) || source.quantity < 0) {
-        throw new Error('quantity deve essere un numero maggiore o uguale a zero.');
-      }
-      normalized.quantity = source.quantity;
-    } else if (typeof source.quantity === 'string') {
-      const val = source.quantity.trim().toLowerCase();
-      if (val === 'in stock' || val === 'disponibile') {
-        normalized.quantity = 10;
-      } else if (val === 'out of stock' || val === 'non disponibile' || val === '') {
-        normalized.quantity = 0;
-      } else {
-        const parsed = Number(val);
-        if (Number.isFinite(parsed) && parsed >= 0) {
-          normalized.quantity = parsed;
-        } else {
+  // +++ Gestione Quantità e Priorità su Disponibilità +++
+  let explicitQuantity = undefined;
+
+  if (source.quantity !== undefined && source.quantity !== null) {
+    const qStr = String(source.quantity).trim();
+    if (qStr !== '') {
+      if (typeof source.quantity === 'number') {
+        if (!Number.isFinite(source.quantity) || source.quantity < 0) {
           throw new Error('quantity deve essere un numero maggiore o uguale a zero.');
         }
+        explicitQuantity = source.quantity;
+      } else {
+        const val = qStr.toLowerCase();
+        if (val === 'in stock' || val === 'disponibile') {
+          explicitQuantity = 10;
+        } else if (val === 'out of stock' || val === 'non disponibile') {
+          explicitQuantity = 0;
+        } else {
+          const parsed = Number(val);
+          if (Number.isFinite(parsed) && parsed >= 0) {
+            explicitQuantity = parsed;
+          } else {
+            throw new Error('quantity deve essere un numero maggiore o uguale a zero.');
+          }
+        }
       }
-    } else {
-      throw new Error('quantity deve essere un numero maggiore o uguale a zero.');
     }
+  }
+
+  if (explicitQuantity !== undefined) {
+    normalized.quantity = explicitQuantity;
   } else if (source.availability != null) {
     const avail = String(source.availability).trim().toLowerCase();
     if (avail === 'in stock' || avail === 'disponibile') {
       normalized.quantity = 10;
-    } else {
+    } else if (avail === 'out of stock' || avail === 'non disponibile') {
       normalized.quantity = 0;
+    } else {
+      delete normalized.quantity;
     }
   } else {
     delete normalized.quantity;
@@ -150,12 +159,15 @@ export function buildBasePayload(product, config) {
     }
     payload.prices = { [config.priceGroup.price_group_id]: product.price };
   }
+  
+  // Controllo magazzino eseguito rigorosamente dopo la normalizzazione della quantità
   if (product.quantity != null) {
     if (!config.warehouse || !/^bl_\d+$/.test(config.warehouse.id)) {
       throw new Error('Magazzino Base valido mancante per la quantita.');
     }
     payload.stock = { [config.warehouse.id]: product.quantity };
   }
+
   if (product.image_link != null) {
     if (!URL.canParse(product.image_link) || !['http:', 'https:'].includes(new URL(product.image_link).protocol)) {
       throw new Error('image_link deve essere un URL HTTP o HTTPS valido.');

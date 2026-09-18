@@ -1,35 +1,56 @@
-import { describe, it } from 'node:test';
-import assert from 'node:assert';
+import { test } from 'node:test';
+import { strict as assert } from 'node:assert';
+import { normalizeProduct, buildBasePayload } from './products.js';
 
-// Importa la funzione o la logica di normalizzazione del tuo progetto
-// (Adatta il percorso in base a dove si trova la tua funzione di normalizzazione)
-// import { normalizeProduct } from '../src/products.js'; 
+const baseMockProduct = {
+  id: 'SKU123',
+  title: 'Prodotto Test',
+  price: '10,00 EUR'
+};
 
-describe('Normalizzazione prodotti e gestione fallback quantità/magazzino', () => {
-  
-  it('dovrebbe trattare la stringa vuota "" come valore mancante o impostarla correttamente', () => {
-    const input = { quantity: "" };
-    // Esempio di test sul comportamento atteso
-    assert.strictEqual(input.quantity === "" ? 0 : input.quantity, 0);
-  });
+const mockConfig = {
+  inventory: { inventory_id: '123' },
+  priceGroup: { price_group_id: '1', currency: 'EUR' },
+  warehouse: { id: 'bl_1' }
+};
 
-  it('dovrebbe gestire correttamente il valore null', () => {
-    const input = { quantity: null, stock_status: "in stock" };
-    // Se la quantità è null ma c'è "in stock", applica il fallback (es. 10)
-    const resolvedQty = (input.quantity === null || input.quantity === "") && input.stock_status === "in stock" ? 10 : input.quantity;
-    assert.strictEqual(resolvedQty, 10);
-  });
+test('normalizzazione quantità: valore 0', () => {
+  const norm = normalizeProduct({ ...baseMockProduct, quantity: 0 });
+  assert.strictEqual(norm.quantity, 0);
+});
 
-  it('le quantità reali devono avere priorità sulla disponibilità', () => {
-    const input = { quantity: 5, stock_status: "in stock" };
-    // La quantità reale (5) deve prevalere sul fallback dello stock
-    assert.strictEqual(input.quantity, 5);
-  });
+test('normalizzazione quantità: valore 200 (nessun limite massimo)', () => {
+  const norm = normalizeProduct({ ...baseMockProduct, quantity: 200 });
+  assert.strictEqual(norm.quantity, 200);
+});
 
-  it('dovrebbe gestire lo stato out of stock impostando la quantità a 0 o gestendo il magazzino', () => {
-    const input = { quantity: null, stock_status: "out of stock" };
-    const resolvedQty = input.stock_status === "in stock" ? 10 : 0;
-    assert.strictEqual(resolvedQty, 0);
-  });
+test('normalizzazione quantità: stringa vuota "" trattata come valore mancante', () => {
+  const norm = normalizeProduct({ ...baseMockProduct, quantity: '' });
+  assert.strictEqual(norm.quantity, undefined);
+});
 
+test('normalizzazione quantità: valore null trattato come valore mancante', () => {
+  const norm = normalizeProduct({ ...baseMockProduct, quantity: null });
+  assert.strictEqual(norm.quantity, undefined);
+});
+
+test('normalizzazione disponibilità: "in stock" imposta quantity a 10', () => {
+  const norm = normalizeProduct({ ...baseMockProduct, availability: 'in stock' });
+  assert.strictEqual(norm.quantity, 10);
+});
+
+test('normalizzazione disponibilità: "esaurito" / "out of stock" imposta quantity a 0', () => {
+  const norm = normalizeProduct({ ...baseMockProduct, availability: 'out of stock' });
+  assert.strictEqual(norm.quantity, 0);
+});
+
+test('priorità: quantità reale ha precedenza su availability', () => {
+  const norm = normalizeProduct({ ...baseMockProduct, quantity: 50, availability: 'out of stock' });
+  assert.strictEqual(norm.quantity, 50);
+});
+
+test('fallback + warehouse: quantità derivata da availability richiede magazzino valido', () => {
+  const product = normalizeProduct({ ...baseMockProduct, availability: 'in stock' });
+  const payload = buildBasePayload(product, mockConfig);
+  assert.deepStrictEqual(payload.stock, { 'bl_1': 10 });
 });
