@@ -20,6 +20,7 @@ async function main() {
   let errors = 0;
   let feedDuplicates = 0;
   const errorSkus = [];
+  const uncertainSkus = [];
   let warehouseStatus = 'non selezionato';
 
   // FASE PREFLIGHT: Esecuzione controlli preliminari
@@ -110,6 +111,11 @@ async function main() {
         log(`SUCCESS (Creato) - product_id: ${result.product_id}`);
 
       } catch (error) {
+        if (error.uncertain) {
+          uncertainSkus.push(sourceProduct?.id ?? '(SKU assente)');
+          log(`[UNCERTAIN] ${error.message}`);
+          continue;
+        }
         errors++;
         errorSkus.push(sourceProduct?.id ?? '(SKU assente)');
         log(`ERROR: ${error.message}`);
@@ -125,7 +131,9 @@ async function main() {
     log(`Warehouse: ${warehouse ? `${warehouse.name} (${warehouse.id})` : warehouseStatus}`);
     log(`Prodotti letti: ${read}\nProdotti selezionati: ${selectedCount}\nProdotti processati: ${processed}\nCreati: ${created}\nAggiornati: ${updated}\nSaltati perché invariati: ${skipped}\nDuplicati nel feed saltati: ${feedDuplicates}\nSimulati: ${simulated}\nErrori: ${errors}`);
     if (errorSkus.length) log(`SKU con errori: ${errorSkus.join(', ')}`);
-    if (errors > 0) process.exitCode = 1;
+    log(`Esiti incerti: ${uncertainSkus.length}`);
+    if (uncertainSkus.length) log(`SKU con esito incerto: ${uncertainSkus.join(', ')}`);
+    if (errors > 0 || uncertainSkus.length > 0) process.exitCode = 1;
   }
 }
 
