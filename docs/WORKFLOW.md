@@ -76,21 +76,35 @@ Non fare push diretto su `main`.
 
 ---
 
-## 5. Testare il codice
+## 5. Testare il codice e i controlli Preflight
 
-Prima di considerare il lavoro completato, il codice deve essere testato.
+Prima di considerare il lavoro completato, il codice deve essere testato rigorosamente.
 
-Non basta verificare un solo caso.
+Oltre ai casi manuali (caso normale, limiti, dati mancanti, ecc.), sfrutta i comandi integrati nel progetto per verificare l'integrità del sistema:
 
-Bisogna provare:
+- Esegui i controlli preliminari:
+  ```bash
+  npm run check
+  ```
 
-- caso normale;
-- casi limite;
-- dati mancanti;
-- dati già presenti;
-- più prodotti;
-- combinazioni diverse;
-- eventuali errori previsti.
+- Esegui la suite di test automatizzati:
+  ```bash
+  npm run check
+  ```
+
+Non basta verificare un solo caso. Bisogna provare:
+
+*   caso normale;
+    
+*   casi limite;
+    
+*   dati mancanti;
+    
+*   prodotti con brand o categorie nuove;
+    
+*   sincronizzazione e aggiornamento prodotti esistenti (UPDATE);
+    
+*   eventuali errori previsti.
 
 La feature deve funzionare senza rompere quello che funzionava prima.
 
@@ -270,6 +284,8 @@ si può fare il merge della Pull Request su `main`.
 
 # Regola principale
 
+# Regola principale
+
 ```text
 ISSUE
 ↓
@@ -277,7 +293,7 @@ BRANCH
 ↓
 SVILUPPO
 ↓
-TEST
+TEST LOCALE & PREFLIGHT (npm run check / npm run test)
 ↓
 AGGIORNAMENTO CON MAIN
 ↓
