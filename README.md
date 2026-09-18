@@ -84,6 +84,13 @@ Il processo di sincronizzazione dei prodotti all'interno di **Easy Script Vudoo*
 
 Il flusso si articola in tre macro-fasi principali gestite dai servizi residenti in `src/services/`:
 
+### 🛡️ Regole di Sicurezza, Validazione e Ottimizzazione del Flusso
+* **Aggiornamenti mirati (UPDATE):** Le operazioni di aggiornamento inviano a Base.com soltanto i campi che hanno subito variazioni effettive rispetto ai dati già presenti.
+* **Gestione SKU ambigui:** Gli SKU considerati ambigui o non conformi vengono intercettati e bloccati preventivamente per evitare conflitti nel catalogo.
+* **Deduplicazione:** Eventuali prodotti duplicati o equivalenti presenti all'interno del feed iniziale vengono automaticamente deduplicati prima dell'elaborazione.
+* **Protezione in DRY_RUN:** Quando la modalità `DRY_RUN=true` è attiva, qualsiasi scrittura o modifica remota viene rigorosamente bloccata e simulata nei log.
+* **Sanitizzazione Unicode:** Prima dell'invio, i testi vengono sottoposti a pulizia per rimuovere o convertire caratteri Unicode non supportati da Base.com.
+
 ### 1. 📥 Estrazione (Fetch del tracciato Vudoo XML)
 * **Recupero dei dati:** Lo script effettua una richiesta HTTP (o legge da sorgente configurata) utilizzando l'URL specificato nella variabile d'ambiente `VUDOO_XML_URL`.
 * **Gestione dello stream:** Il documento XML viene scaricato in memoria o elaborato tramite stream per ottimizzare l'uso delle risorse di sistema, specialmente in presenza di cataloghi di grandi dimensioni.
