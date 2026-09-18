@@ -25,6 +25,9 @@ Preferibilmente usare l'inglese e descrivere l'azione eseguita.
 Esempi corretti:
 
 ```text
+Add interactive CLI menu
+Add preflight environment checks
+Add automatic category mapping
 Add duplicate SKU check
 Fix product update logic
 Add automatic manufacturer handling
