@@ -53,7 +53,7 @@ export function normalizeProduct(source) {
 
   // +++ BLOCCO 2: Pulizia spazi EAN e check sintassi URL +++
   if (source.ean != null) {
-    normalized.ean = source.ean.replace(/\s+/g, ''); // Rimuove gli spazi anomali
+    normalized.ean = source.ean.replace(/\s+/g, '');
     if (normalized.ean !== '' && !/^\d{8,14}$/.test(normalized.ean)) {
       throw new Error(`Validazione fallita: EAN non valido (${source.ean}).`);
     }
@@ -81,7 +81,7 @@ export function normalizeProduct(source) {
   }
 
   // +++ Gestione Quantità e Fallback Disponibilità +++
-  if (source.quantity != null) {
+  if (source.quantity !== undefined && source.quantity !== null && source.quantity !== '') {
     if (typeof source.quantity === 'number') {
       if (!Number.isFinite(source.quantity) || source.quantity < 0) {
         throw new Error('quantity deve essere un numero maggiore o uguale a zero.');
@@ -91,7 +91,7 @@ export function normalizeProduct(source) {
       const val = source.quantity.trim().toLowerCase();
       if (val === 'in stock' || val === 'disponibile') {
         normalized.quantity = 10;
-      } else if (val === 'out of stock' || val === 'non disponibile') {
+      } else if (val === 'out of stock' || val === 'non disponibile' || val === '') {
         normalized.quantity = 0;
       } else {
         const parsed = Number(val);
@@ -108,9 +108,11 @@ export function normalizeProduct(source) {
     const avail = String(source.availability).trim().toLowerCase();
     if (avail === 'in stock' || avail === 'disponibile') {
       normalized.quantity = 10;
-    } else if (avail === 'out of stock' || avail === 'non disponibile') {
+    } else {
       normalized.quantity = 0;
     }
+  } else {
+    delete normalized.quantity;
   }
 
   return normalized;
