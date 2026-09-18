@@ -30,7 +30,7 @@ npm install
 
 Prima di avviare lo script, è necessario configurare le variabili d'ambiente. Per la guida dettagliata su come impostare la configurazione di Base.com e la sorgente Vudoo XML, fai riferimento al file di documentazione dedicato:
 
-* [Guida alla Configurazione](./configurazione.md)
+* [Guida alla Configurazione](./docs/configurazione.md)
 
 ## 📂 Struttura Attuale delle Cartelle e dei Moduli
 Il progetto è organizzato in modo modulare per separare la logica di recupero dati, la trasformazione e l'interazione con le API esterne:
@@ -135,7 +135,7 @@ Il progetto include una suite di test pensata per verificare la correttezza dell
   npm test
 
 ## 📚 Link alla Documentazione Secondaria
-Per approfondire aspetti specifici del progetto, guide avanzate o integrazioni particolari, puoi fare riferimento ai seguenti documenti all'interno del repository:
-* [Guida alle API di Base.com](./docs/base-api.md) - Approfondimento sui metodi di chiamata e gestione dei token.
-* [Tracciato Vudoo XML](./docs/vudoo-schema.md) - Dettagli sui campi mappati e sulla struttura del fornitore.
-* [Log delle Module e Changelog](./CHANGELOG.md) - Cronologia completa delle versioni e delle modifiche introdotte.
+Per approfondire aspetti specifici del progetto, guide avanzate o integrazioni particolari, puoi fare riferimento ai seguenti documenti all'interno della cartella `docs`:
+* [Guida alla Configurazione](./docs/configurazione.md) - Guida dettagliata per impostare le variabili d'ambiente e la configurazione di Base.com e Vudoo.
+* [Modalità CLI](./docs/cli-modalita.md) - Approfondimento sui comandi, le opzioni e l'utilizzo della riga di comando.
+* [Architettura del Progetto](./docs/architettura.md) - Panoramica dettagliata della struttura dei moduli, del flusso dati e della logica interna.
