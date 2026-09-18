@@ -4,31 +4,42 @@ Sviluppi e miglioramenti previsti per il progetto.
 
 ## Stato attuale
 
-Il flusso attuale permette di:
+Il flusso attuale (versione 1.1.0) permette di:
 
 ```text
 Vudoo XML
     ↓
 Conversione JSON
     ↓
-Normalizzazione prodotti
+Preflight Check (Validazione ambiente e inventory)
     ↓
-Controllo duplicati SKU
+Sincronizzazione Produttori e Categorie automatiche
     ↓
-Creazione payload
+Controllo SKU e Confronto dati (Create / Update / Skip)
     ↓
-Importazione tramite API Base.com
+Importazione / Aggiornamento tramite API Base.com
 ```
-
 Sono già disponibili:
 
-- `TEST_MODE` per elaborare un solo prodotto;
-- `DRY_RUN` per simulare l'importazione;
-- selezione dell'inventory Base.com;
-- recupero del gruppo prezzi;
-- controllo degli SKU già presenti;
-- importazione dei nuovi prodotti;
-- gestione degli errori senza interrompere l'intero catalogo.
+*   TEST\_MODE per elaborare un solo prodotto;
+    
+*   DRY\_RUN per simulare l'importazione;
+    
+*   Interfaccia CLI interattiva a menu;
+    
+*   Controlli preliminari Preflight per bloccare errori di configurazione;
+    
+*   Selezione e verifica dell'inventory Base.com;
+    
+*   Recupero automatico del gruppo prezzi;
+    
+*   **Gestione automatica dei produttori** (productor.js);
+    
+*   **Gestione automatica delle categorie** con mantenimento della gerarchia;
+    
+*   **Aggiornamento dei prodotti esistenti** (confronto dati e UPDATE su SKU già presenti);
+    
+*   Controllo degli SKU e gestione degli errori senza interrompere l'intero catalogo.
 
 ---
 
@@ -50,7 +61,7 @@ Normalizzazione
 Base.com
 ```
 
-In questo modo `real_products.json` potrà rimanere principalmente come strumento di test.
+In questo modo `real_products.json` potrà rimanere principalmente come strumento di test o di fallback.
 
 ---
 
@@ -143,22 +154,28 @@ Non ricavare quantità artificialmente dal semplice valore `in stock`.
 
 ## 6. Miglioramento validazione prodotti
 
-Aggiungere controlli prima dell'invio verso Base.com per individuare dati mancanti o non validi.
+Aggiungere ulteriori controlli prima dell'invio verso Base.com per individuare dati mancanti o non validi.
 
 Esempi:
 
-- SKU mancante;
-- prezzo non valido;
-- EAN non valido;
-- URL immagine non valido;
-- peso non valido;
-- campi obbligatori mancanti.
+*   SKU mancante;
+    
+*   prezzo non valido;
+    
+*   EAN non valido;
+    
+*   URL immagine non valido;
+    
+*   peso non valido;
+    
+*   campi obbligatori mancanti.
+
 
 Il prodotto problematico dovrà essere segnalato senza bloccare gli altri.
 
 ---
 
-## 7. Report finale
+## 7. Report finale avanzato
 
 Rendere più completo il riepilogo dell'esecuzione.
 

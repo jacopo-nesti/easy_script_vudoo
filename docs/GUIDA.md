@@ -11,9 +11,9 @@ convert_xml_to_json.js
         ↓
 real_products.json
         ↓
-index.js
+Preflight Check (index.js o CLI)
         ↓
-API Base.com
+API Base.com (Sincronizzazione Produttori & Prodotti)
         ↓
 Catalogo Base.com
 ```
@@ -484,8 +484,6 @@ Lo script processerà tutti i prodotti presenti in:
 real_products.json
 ```
 
----
-
 # Controllo duplicati
 
 Prima di creare un prodotto, lo script controlla se lo stesso SKU è già presente nell'inventory Base.com selezionato.
@@ -578,37 +576,33 @@ DRY_RUN=false
 
 ---
 
-# Comandi principali
+## 12. Fase Preflight e Sincronizzazione Produttori
 
-## Installazione dipendenze
+Prima di procedere con qualsiasi scrittura o aggiornamento massivo dei prodotti, lo script esegue un controllo preliminare obbligatorio (**Preflight Check**):
 
-```bash
-npm install
-```
+* **Validazione Inventory:** Verifica l'esistenza e la correttezza dell'ID magazzino e dell'inventory su Base.com.
+* **Controllo Prezzi:** Recupera e valida automaticamente il gruppo prezzi associato.
+* **Blocco di Sicurezza:** In caso di anomalie o errori di configurazione, il processo si interrompe immediatamente (`exitCode = 1`), impedendo qualsiasi scrittura errata sul server.
 
-## Conversione XML → JSON
-
-```bash
-npm run convert
-```
-
-## Avvio importazione
+Inoltre, per la gestione dei marchi, è disponibile uno script dedicato per la sincronizzazione dei produttori:
 
 ```bash
-npm start
+npm run productor
 ```
 
-## Versione Node.js
+---
 
-```bash
-node -v
-```
+## 13. Comandi Principali Aggiornati
 
-## Versione npm
+Il file `package.json` della versione 1.1.0 mette a disposizione i seguenti comandi rapidi da terminale:
 
-```bash
-npm -v
-```
+* **Avvio Menu Interattivo:** `npm start`
+* **Verifica ambiente e configurazione:** `npm run check`
+* **Importazione / aggiornamento prodotti:** `npm run import`
+* **Flusso completo di sincronizzazione:** `npm run sync`
+* **Conversione XML → JSON:** `npm run convert`
+* **Sincronizzazione produttori:** `npm run productor`
+* **Esecuzione test automatici:** `npm run test`
 
 ---
 
@@ -645,6 +639,34 @@ Per un nuovo utilizzo del progetto:
         ↓
 14. npm start
 ```
+
+---
+
+## Interfaccia CLI Interattiva
+
+Invece di avviare gli script singolarmente, puoi lanciare l'interfaccia a menu interattivo digitando nel terminale:
+
+```bash
+npm start
+```
+
+Il menu ti permette di selezionare l'operazione desiderata inserendo il numero corrispondente:
+
+*   **0.** Verifica ambiente e configurazione (Check): esegue i controlli preliminari sullo stato del sistema.
+    
+*   **1.** Converti XML → JSON (Convert): trasforma il feed XML di Vudoo nel file JSON locale.
+    
+*   **2.** Esegui controlli preliminari (Preflight Check): valida preventivamente l'inventory e le configurazioni di Base.com.
+    
+*   **3.** Sincronizza produttori (Productor): si occupa di allineare i marchi e le aziende.
+    
+*   **4.** Importa / aggiorna prodotti su Base.com (Import): avvia il flusso di scrittura e aggiornamento dei prodotti.
+    
+*   **5.** Esegui flusso completo (Sync): esegue l'intera procedura automatizzata.
+    
+*   **6.** Esegui test automatici (Test): lancia la suite di test integrati.
+    
+*   **7.** Esci: chiude l'applicazione.
 
 ---
 
