@@ -5,13 +5,14 @@ Questo script permette di importare un catalogo prodotti da **Vudoo** a **Base.c
 ## Flusso attuale
 
 ```text
+
 Catalogo Vudoo (.xml)
         ↓
 convert_xml_to_json.js
         ↓
 real_products.json
         ↓
-index.js
+CLI (cli.js) / Sync (sync.js)
         ↓
 API Base.com
         ↓

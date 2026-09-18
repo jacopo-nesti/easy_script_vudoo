@@ -14,6 +14,7 @@ Il progetto nasce per semplificare un processo che altrimenti richiederebbe la g
 ## Flusso attuale
 
 ```text
+
 Panel Vudoo
     ↓
 Download catalogo Google XML
@@ -21,6 +22,8 @@ Download catalogo Google XML
 convert_xml_to_json.js
     ↓
 real_products.json
+    ↓
+CLI (cli.js) / Sync (sync.js)
     ↓
 Normalizzazione dati
     ↓
