@@ -1,6 +1,6 @@
 import { token, testMode, dryRun } from './config.js';
 import { getBaseInventory, getBasePriceGroup, getBaseWarehouse } from './baseApi.js';
-import { getProducts, detectAndFilterDuplicates } from './products.js';
+import { getProducts, detectAndFilterDuplicates, normalizeProduct } from './products.js';
 import { log } from './logger.js';
 
 export async function runPreflightCheck() {
@@ -51,7 +51,13 @@ export async function runPreflightCheck() {
 
   // 5. Verifica Warehouse SOLO quando richiesto dallo stock dei prodotti
   let warehouse = null;
-  const requiresWarehouse = uniqueProducts.some(product => product?.quantity != null);
+  const requiresWarehouse = uniqueProducts.some(product => {
+    try {
+      return normalizeProduct(product).quantity != null;
+    } catch {
+      return product?.quantity != null;
+    }
+  });
 
   if (requiresWarehouse) {
     warehouse = await getBaseWarehouse(inventory);

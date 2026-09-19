@@ -79,9 +79,22 @@ export function normalizeProduct(source) {
       normalized.shipping.price = parseFeedNumber(source.shipping.price, 'EUR', 'shipping.price');
     }
   }
-  if (source.quantity != null &&
-    (typeof source.quantity !== 'number' || !Number.isFinite(source.quantity) || source.quantity < 0)) {
-    throw new Error('quantity deve essere un numero maggiore o uguale a zero.');
+  const quantityMissing = source.quantity == null ||
+    (typeof source.quantity === 'string' && source.quantity.trim() === '');
+
+  if (!quantityMissing) {
+    const quantity = typeof source.quantity === 'string'
+      ? Number(source.quantity.trim())
+      : source.quantity;
+    if (typeof quantity !== 'number' || !Number.isFinite(quantity) || quantity < 0) {
+      throw new Error('quantity deve essere un numero maggiore o uguale a zero.');
+    }
+    normalized.quantity = quantity;
+  } else {
+    const availability = source.availability?.trim().toLowerCase();
+    if (availability === 'in stock') normalized.quantity = 10;
+    else if (availability === 'out of stock') normalized.quantity = 0;
+    else delete normalized.quantity;
   }
   return normalized;
 }

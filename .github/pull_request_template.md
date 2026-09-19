@@ -1,6 +1,3 @@
-## Descrizione
-Inserisci qui un breve riassunto delle modifiche introdotte.
-
 ## Checklist del progetto
 - [ ] `npm test` eseguito con successo
 - [ ] Ramo allineato rispetto a `main`

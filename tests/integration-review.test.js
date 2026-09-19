@@ -148,6 +148,32 @@ test('Payload: warehouse reale, ID stretti, nessuno stock inventato', () => {
   assert.throws(() => buildBasePayload({ ...normalized, quantity: 2 }, { ...config, warehouse: { id: 'default' } }));
   assert.throws(() => buildBasePayload({ ...normalized, category_id: '12abc' }, config));
 });
+test('Quantita: valori reali, stringhe e fallback availability', () => {
+  const cases = [
+    [{ quantity: 0 }, 0],
+    [{ quantity: 25 }, 25],
+    [{ quantity: 200 }, 200],
+    [{ quantity: '25' }, 25],
+    [{ quantity: '', availability: 'in stock' }, 10],
+    [{ quantity: null, availability: 'in stock' }, 10],
+    [{ availability: 'in stock' }, 10],
+    [{ availability: 'out of stock' }, 0],
+    [{ quantity: 35, availability: 'in stock' }, 35],
+  ];
+  for (const [values, expected] of cases) {
+    assert.equal(normalizeProduct({ ...source, ...values }).quantity, expected);
+  }
+  assert.equal(normalizeProduct({ ...source, quantity: 200, availability: 'in stock' }).quantity, 200);
+});
+test('Stock: fallback richiede warehouse e UPDATE resta selettivo', () => {
+  const product = normalizeProduct({ ...source, availability: 'in stock' });
+  assert.throws(() => buildBasePayload(product, { ...config, warehouse: null }), /Magazzino/);
+  assert.deepEqual(buildBasePayload(product, config).stock, { bl_30: 10 });
+  assert.equal(buildBaseUpdatePayload(product, { ...details, stock: { bl_30: 10 } }, config), null);
+  assert.deepEqual(buildBaseUpdatePayload(product, { ...details, stock: { bl_30: 4 } }, config), {
+    inventory_id: 10, stock: { bl_30: 10 },
+  });
+});
 test('UPDATE confronta il gruppo selezionato e invia solo le differenze', () => {
   const normalized = normalizeProduct(source);
   assert.equal(buildBaseUpdatePayload(normalized, details, config), null);
@@ -220,6 +246,18 @@ test('Quantita: recupero del warehouse associato', async () => {
   const result = await sandbox({ products: [{ ...source, quantity: 2 }], env: { BASE_WAREHOUSE_ID: 'bl_30' } });
   assert.equal(result.exitCode, 0);
   assert.ok(result.logs.some(log => log.includes('"bl_30": 2')));
+});
+test('Quantita fallback: preflight recupera e riutilizza il warehouse associato', async () => {
+  const result = await sandbox({ products: [{ ...source, availability: 'in stock' }], env: { BASE_WAREHOUSE_ID: 'bl_30' } });
+  assert.equal(result.exitCode, 0);
+  assert.equal(result.calls.filter(call => call.method === 'getInventoryWarehouses').length, 1);
+  assert.ok(result.logs.some(log => log.includes('"bl_30": 10')));
+});
+test('Quantita fallback: DRY_RUN non esegue scritture', async () => {
+  const result = await sandbox({ products: [{ ...source, availability: 'out of stock' }], env: { BASE_WAREHOUSE_ID: 'bl_30' } });
+  assert.equal(result.exitCode, 0);
+  assert.ok(result.logs.some(log => log.includes('"bl_30": 0')));
+  assert.ok(result.calls.every(call => call.method.startsWith('get')));
 });
 test('Tutti i prodotti: dedup e prosecuzione dopo errore', async () => {
   const result = await sandbox({ env: { TEST_MODE: 'false' }, products: [source, source, { ...source, id: 'INVALID', price: 'bad' }, { ...source, id: 'SKU-B' }] });
