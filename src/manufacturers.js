@@ -1,10 +1,7 @@
 import { callBase } from './baseApi.js';
 import { log } from './logger.js';
 import { dryRun } from './config.js';
-
-function cleanName(name) {
-  return name.trim().replace(/\s+/g, ' ');
-}
+import { cleanName, nameIdentity } from './names.js';
 
 export async function getManufacturerMap() {
   log('[DEBUG] Caricamento produttori esistenti da Base.com...');
@@ -18,7 +15,7 @@ export async function getManufacturerMap() {
       const name = m.manufacturer_name ?? m.name;
       const id = Number(m.manufacturer_id);
       if (typeof name !== 'string' || !name.trim() || !Number.isSafeInteger(id) || id <= 0) throw new Error('Produttore Base.com non valido.');
-      const key = cleanName(name).toLowerCase();
+      const key = nameIdentity(name);
       if (mfgMap.has(key) && mfgMap.get(key) !== id) throw new Error(`Produttore ambiguo: ${name}.`);
       mfgMap.set(key, id);
     }
@@ -29,7 +26,7 @@ export async function getManufacturerMap() {
 
 export function assignManufacturer(product, mfgMap) {
   if (product.brand) {
-    const brandKey = cleanName(product.brand).toLowerCase();
+    const brandKey = nameIdentity(product.brand);
     if (mfgMap.has(brandKey)) {
       product.manufacturer_id = mfgMap.get(brandKey);
       log(`[DEBUG] Brand trovato: "${product.brand}" -> manufacturer_id: ${product.manufacturer_id}`);
@@ -44,16 +41,31 @@ export async function ensureManufacturer(brandName, manufacturerMap) {
   if (typeof brandName !== 'string') throw new Error('brand deve essere una stringa.');
   const name = cleanName(brandName);
   if (!name) return null;
-  const key = name.toLowerCase();
+  const key = nameIdentity(name);
   if (manufacturerMap.has(key)) return manufacturerMap.get(key);
   if (dryRun === 'true') {
     log(`[DRY_RUN] Produttore da creare: ${name}`);
     manufacturerMap.set(key, null);
     return null;
   }
-  const result = await callBase('addInventoryManufacturer', { manufacturer_name: name });
-  const id = Number(result.manufacturer_id);
-  if (!Number.isSafeInteger(id) || id <= 0) throw new Error(`ID produttore non valido: ${name}.`);
+  let id;
+  try {
+    const result = await callBase('addInventoryManufacturer', { manufacturer_name: name });
+    id = Number(result.manufacturer_id);
+    if (!Number.isSafeInteger(id) || id <= 0) throw new Error(`ID produttore non valido: ${name}.`);
+  } catch (error) {
+    if (!error.uncertain) throw error;
+    log(`[UNCERTAIN] Produttore ${name}: verifica read-only dopo CREATE incerta...`);
+    try {
+      const refreshed = await getManufacturerMap();
+      id = refreshed.get(key);
+      if (!Number.isSafeInteger(id) || id <= 0) throw new Error('Produttore equivalente non trovato.');
+      log(`[UNCERTAIN] Produttore ${name}: risorsa equivalente trovata (${id}), CREATE confermata.`);
+    } catch (verificationError) {
+      log(`[UNCERTAIN] Produttore ${name}: verifica non conclusiva (${verificationError.message}).`);
+      throw error;
+    }
+  }
   manufacturerMap.set(key, id);
   log(`SUCCESS - Produttore creato: ${name} (${id})`);
   return id;

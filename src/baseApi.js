@@ -1,6 +1,7 @@
 import { token, inventoryId, warehouseId, dryRun } from './config.js';
 import { log } from './logger.js';
 import { buildBasePayload, buildBaseUpdatePayload } from './products.js';
+import { nameIdentity } from './names.js';
 
 const readMethods = new Set([
   'getInventories', 'getInventoryPriceGroups', 'getInventoryWarehouses',
@@ -45,6 +46,16 @@ function apiSetting(name, fallback, minimum, maximum) {
 
 function apiError(message, temporary = false, uncertain = false, retryAfterMs = 0) {
   return Object.assign(new Error(message), { temporary, uncertain, retryAfterMs });
+}
+
+function requestKey(method, parameters, body) {
+  if (method === 'addInventoryManufacturer' && typeof parameters.manufacturer_name === 'string') {
+    return JSON.stringify([method, nameIdentity(parameters.manufacturer_name)]);
+  }
+  if (method === 'addInventoryCategory' && typeof parameters.name === 'string') {
+    return JSON.stringify([method, parameters.inventory_id, parameters.parent_id, nameIdentity(parameters.name)]);
+  }
+  return body?.toString() ?? new URLSearchParams({ method, parameters: JSON.stringify(parameters) }).toString();
 }
 
 function retryAfter(response) {
@@ -104,7 +115,7 @@ export async function callBase(method, parameters = {}) {
   const retryDelay = apiSetting('BASE_API_RETRY_DELAY_MS', 1000, 1, 3600000);
   const rateLimitDelay = apiSetting('BASE_API_RATE_LIMIT_DELAY_MS', 60000, 1, 3600000);
   const body = new URLSearchParams({ method, parameters: JSON.stringify(parameters) });
-  const key = body.toString();
+  const key = requestKey(method, parameters, body);
   const run = requestQueue.then(async () => {
     if (!readOnly && uncertainWrites.has(key)) throw uncertainWrites.get(key);
     for (let attempt = 1; attempt <= (readOnly ? attempts : 1); attempt++) {
@@ -290,7 +301,7 @@ async function writeProductAndVerify(payload, sku) {
     return result;
   } catch (error) {
     if (!error.uncertain) throw error;
-    const key = new URLSearchParams({ method: 'addInventoryProduct', parameters: JSON.stringify(payload) }).toString();
+    const key = requestKey('addInventoryProduct', payload);
     uncertainWrites.set(key, error);
     log(`[UNCERTAIN] ${operation} SKU ${sku}: ${error.message}; verifica read-only...`);
     try {

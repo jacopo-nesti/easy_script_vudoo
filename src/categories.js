@@ -1,6 +1,11 @@
 import { callBase } from './baseApi.js';
 import { dryRun } from './config.js';
 import { log } from './logger.js';
+import { cleanName, nameIdentity } from './names.js';
+
+function categoryKey(parent, name) {
+  return `${parent}:${nameIdentity(name)}`;
+}
 
 export async function getCategoryMap(inventoryId) {
   const data = await callBase('getInventoryCategories', { inventory_id: inventoryId });
@@ -12,7 +17,7 @@ export async function getCategoryMap(inventoryId) {
     if (typeof category.name !== 'string' || !category.name.trim() || !Number.isSafeInteger(id) || id <= 0 || !Number.isSafeInteger(parent) || parent < 0) {
       throw new Error('Categoria Base.com non valida.');
     }
-    const key = `${parent}:${category.name.trim().replace(/\s+/g, ' ').toLowerCase()}`;
+    const key = categoryKey(parent, category.name);
     if (categories.has(key) && categories.get(key) !== id) throw new Error(`Categoria ambigua: ${category.name}.`);
     categories.set(key, id);
   }
@@ -23,19 +28,34 @@ export async function ensureCategoryPath(productType, inventoryId, categories) {
   if (productType == null || productType === '') return null;
   if (typeof productType !== 'string') throw new Error('product_type deve essere una stringa.');
   if (!productType.trim()) return null;
-  const parts = productType.split('>').map(name => name.trim().replace(/\s+/g, ' '));
+  const parts = productType.split('>').map(cleanName);
   if (parts.some(name => !name)) throw new Error('Percorso categorie con livello vuoto.');
   let parent = 0;
   for (const name of parts) {
-    const key = `${parent}:${name.toLowerCase()}`;
+    const key = categoryKey(parent, name);
     if (!categories.has(key)) {
       if (dryRun === 'true') {
         log(`[DRY_RUN] Categoria da creare: ${name} (parent: ${parent})`);
         categories.set(key, null);
       } else {
-        const result = await callBase('addInventoryCategory', { inventory_id: inventoryId, name, parent_id: parent });
-        const id = Number(result.category_id);
-        if (!Number.isSafeInteger(id) || id <= 0) throw new Error(`ID categoria non valido: ${name}.`);
+        let id;
+        try {
+          const result = await callBase('addInventoryCategory', { inventory_id: inventoryId, name, parent_id: parent });
+          id = Number(result.category_id);
+          if (!Number.isSafeInteger(id) || id <= 0) throw new Error(`ID categoria non valido: ${name}.`);
+        } catch (error) {
+          if (!error.uncertain) throw error;
+          log(`[UNCERTAIN] Categoria ${name}: verifica read-only dopo CREATE incerta...`);
+          try {
+            const refreshed = await getCategoryMap(inventoryId);
+            id = refreshed.get(key);
+            if (!Number.isSafeInteger(id) || id <= 0) throw new Error('Categoria equivalente non trovata con lo stesso parent.');
+            log(`[UNCERTAIN] Categoria ${name}: risorsa equivalente trovata (${id}), CREATE confermata.`);
+          } catch (verificationError) {
+            log(`[UNCERTAIN] Categoria ${name}: verifica non conclusiva (${verificationError.message}).`);
+            throw error;
+          }
+        }
         categories.set(key, id);
         log(`SUCCESS - Categoria creata: ${name} (${id})`);
       }

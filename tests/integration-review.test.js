@@ -375,6 +375,137 @@ const writeTimeout = method => {
   if (method === 'addInventoryProduct') throw Object.assign(new Error('Risposta persa'), { name: 'TimeoutError' });
 };
 
+for (const returnedName of ['Birra Becagli', 'birra becagli', '  birra   becagli  ']) {
+  test(`Produttore incerto: riconcilia nome equivalente ${JSON.stringify(returnedName)} e aggiorna la cache`, async () => {
+    const result = await sandbox({ entry: '../src/manufacturers.js', env: { DRY_RUN: 'false' },
+      response: method => {
+        if (method === 'addInventoryManufacturer') throw new Error('Risposta persa dopo il salvataggio');
+        if (method === 'getInventoryManufacturers') {
+          return successResponse({ manufacturers: [{ manufacturer_id: 81, name: returnedName }] });
+        }
+      },
+      action: async module => {
+        const manufacturers = new Map();
+        assert.equal(await module.ensureManufacturer('Birra Becagli', manufacturers), 81);
+        assert.equal(manufacturers.get('birra becagli'), 81);
+        assert.equal(await module.ensureManufacturer('  BIRRA   BECAGLI ', manufacturers), 81);
+      },
+    });
+    assert.equal(result.calls.filter(call => call.method === 'addInventoryManufacturer').length, 1);
+    assert.equal(result.calls.filter(call => call.method === 'getInventoryManufacturers').length, 1);
+  });
+}
+
+test('Produttore incerto: nome diverso non viene riconciliato', async () => {
+  const result = await sandbox({ entry: '../src/manufacturers.js', env: { DRY_RUN: 'false' },
+    response: method => {
+      if (method === 'addInventoryManufacturer') throw new Error('Risposta persa dopo il salvataggio');
+      if (method === 'getInventoryManufacturers') {
+        return successResponse({ manufacturers: [{ manufacturer_id: 82, name: 'Birra Rossi' }] });
+      }
+    },
+    action: module => assert.rejects(module.ensureManufacturer('Birra Becagli', new Map()), error => error.uncertain === true),
+  });
+  assert.equal(result.calls.filter(call => call.method === 'addInventoryManufacturer').length, 1);
+});
+
+test('Produttore incerto: una variante del nome non ripete la CREATE dopo una verifica iniziale inconclusiva', async () => {
+  const result = await sandbox({ entry: '../src/manufacturers.js', env: { DRY_RUN: 'false' },
+    response: (method, parameters, calls) => {
+      if (method === 'addInventoryManufacturer') throw new Error('Risposta persa dopo il salvataggio');
+      if (method === 'getInventoryManufacturers') {
+        const reads = calls.filter(call => call.method === method).length;
+        return successResponse({ manufacturers: reads === 1 ? [] : [{ manufacturer_id: 83, name: ' birra   becagli ' }] });
+      }
+    },
+    action: async module => {
+      const manufacturers = new Map();
+      await assert.rejects(module.ensureManufacturer('Birra Becagli', manufacturers), error => error.uncertain === true);
+      assert.equal(await module.ensureManufacturer(' BIRRA  BECAGLI ', manufacturers), 83);
+      assert.equal(manufacturers.get('birra becagli'), 83);
+    },
+  });
+  assert.equal(result.calls.filter(call => call.method === 'addInventoryManufacturer').length, 1);
+  assert.equal(result.calls.filter(call => call.method === 'getInventoryManufacturers').length, 2);
+});
+
+test('Categoria incerta: nome equivalente e stesso parent riconciliano e aggiornano la cache', async () => {
+  const result = await sandbox({ entry: '../src/categories.js', env: { DRY_RUN: 'false' },
+    response: method => {
+      if (method === 'addInventoryCategory') throw new Error('Risposta persa dopo il salvataggio');
+      if (method === 'getInventoryCategories') {
+        return successResponse({ categories: [{ category_id: 91, parent_id: 0, name: '  bIrRe   artigianali  ' }] });
+      }
+    },
+    action: async module => {
+      const categories = new Map();
+      assert.equal(await module.ensureCategoryPath('Birre artigianali', 10, categories), 91);
+      assert.equal(categories.get('0:birre artigianali'), 91);
+      assert.equal(await module.ensureCategoryPath(' BIRRE   ARTIGIANALI ', 10, categories), 91);
+    },
+  });
+  assert.equal(result.calls.filter(call => call.method === 'addInventoryCategory').length, 1);
+  assert.equal(result.calls.filter(call => call.method === 'getInventoryCategories').length, 1);
+});
+
+for (const scenario of ['parent diverso', 'ambiguo']) {
+  test(`Categoria incerta: ${scenario} non viene riconciliato arbitrariamente`, async () => {
+    const categories = scenario === 'parent diverso'
+      ? [{ category_id: 91, parent_id: 99, name: 'BIRRE' }]
+      : [{ category_id: 91, parent_id: 0, name: 'Birre' }, { category_id: 92, parent_id: 0, name: ' BIRRE ' }];
+    const result = await sandbox({ entry: '../src/categories.js', env: { DRY_RUN: 'false' },
+      response: method => {
+        if (method === 'addInventoryCategory') throw new Error('Risposta persa dopo il salvataggio');
+        if (method === 'getInventoryCategories') return successResponse({ categories });
+      },
+      action: module => assert.rejects(module.ensureCategoryPath('Birre', 10, new Map()), error => error.uncertain === true),
+    });
+    assert.equal(result.calls.filter(call => call.method === 'addInventoryCategory').length, 1);
+  });
+}
+
+test('Categoria incerta: una variante del nome non ripete la CREATE dopo una verifica iniziale inconclusiva', async () => {
+  const result = await sandbox({ entry: '../src/categories.js', env: { DRY_RUN: 'false' },
+    response: (method, parameters, calls) => {
+      if (method === 'addInventoryCategory') throw new Error('Risposta persa dopo il salvataggio');
+      if (method === 'getInventoryCategories') {
+        const reads = calls.filter(call => call.method === method).length;
+        return successResponse({ categories: reads === 1 ? [] : [{ category_id: 93, parent_id: 0, name: ' BIRRE ' }] });
+      }
+    },
+    action: async module => {
+      const categories = new Map();
+      await assert.rejects(module.ensureCategoryPath('Birre', 10, categories), error => error.uncertain === true);
+      assert.equal(await module.ensureCategoryPath(' BIRRE ', 10, categories), 93);
+      assert.equal(categories.get('0:birre'), 93);
+    },
+  });
+  assert.equal(result.calls.filter(call => call.method === 'addInventoryCategory').length, 1);
+  assert.equal(result.calls.filter(call => call.method === 'getInventoryCategories').length, 2);
+});
+
+test('Categorie e produttori: CREATE confermata, DRY_RUN ed errore definitivo restano invariati', async () => {
+  const confirmed = await sandbox({ entry: '../src/manufacturers.js', env: { DRY_RUN: 'false' },
+    action: async module => {
+      const manufacturers = new Map();
+      assert.ok(await module.ensureManufacturer('Marca', manufacturers) > 0);
+      assert.ok(manufacturers.get('marca') > 0);
+    },
+  });
+  assert.deepEqual(confirmed.calls.map(call => call.method), ['addInventoryManufacturer']);
+
+  const dry = await sandbox({ entry: '../src/categories.js', action: async module => {
+    assert.equal(await module.ensureCategoryPath('Casa', 10, new Map()), null);
+  } });
+  assert.equal(dry.calls.length, 0);
+
+  const definitive = await sandbox({ entry: '../src/categories.js', env: { DRY_RUN: 'false' },
+    response: method => method === 'addInventoryCategory' ? { ok: false, status: 400 } : undefined,
+    action: module => assert.rejects(module.ensureCategoryPath('Casa', 10, new Map()), error => !error.uncertain),
+  });
+  assert.deepEqual(definitive.calls.map(call => call.method), ['addInventoryCategory']);
+});
+
 test('API: lettura riuscita al primo tentativo', async () => {
   const result = await sandbox({ entry: '../src/baseApi.js', action: api => api.callBase('getInventories') });
   assert.equal(result.calls.length, 1);
