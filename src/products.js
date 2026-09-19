@@ -27,6 +27,29 @@ export function parseFeedNumber(value, unit, field) {
   return number;
 }
 
+function getEffectiveQuantity(source) {
+  const quantityMissing = source.quantity == null ||
+    (typeof source.quantity === 'string' && source.quantity.trim() === '');
+
+  if (!quantityMissing) {
+    const quantity = typeof source.quantity === 'string'
+      ? Number(source.quantity.trim())
+      : source.quantity;
+    if (typeof quantity !== 'number' || !Number.isFinite(quantity) || quantity < 0) {
+      throw new Error('quantity deve essere un numero maggiore o uguale a zero.');
+    }
+    return quantity;
+  }
+
+  if (source.availability != null && typeof source.availability !== 'string') {
+    throw new Error('availability deve essere una stringa.');
+  }
+  const availability = source.availability?.trim().toLowerCase();
+  if (availability === 'in stock') return 10;
+  if (availability === 'out of stock') return 0;
+  return undefined;
+}
+
 export function normalizeProduct(source) {
   if (!source || typeof source !== 'object' || Array.isArray(source)) {
     throw new Error('Il prodotto deve essere un oggetto JSON.');
@@ -79,23 +102,9 @@ export function normalizeProduct(source) {
       normalized.shipping.price = parseFeedNumber(source.shipping.price, 'EUR', 'shipping.price');
     }
   }
-  const quantityMissing = source.quantity == null ||
-    (typeof source.quantity === 'string' && source.quantity.trim() === '');
-
-  if (!quantityMissing) {
-    const quantity = typeof source.quantity === 'string'
-      ? Number(source.quantity.trim())
-      : source.quantity;
-    if (typeof quantity !== 'number' || !Number.isFinite(quantity) || quantity < 0) {
-      throw new Error('quantity deve essere un numero maggiore o uguale a zero.');
-    }
-    normalized.quantity = quantity;
-  } else {
-    const availability = source.availability?.trim().toLowerCase();
-    if (availability === 'in stock') normalized.quantity = 10;
-    else if (availability === 'out of stock') normalized.quantity = 0;
-    else delete normalized.quantity;
-  }
+  const quantity = getEffectiveQuantity(source);
+  if (quantity != null) normalized.quantity = quantity;
+  else delete normalized.quantity;
   return normalized;
 }
 
@@ -161,10 +170,13 @@ export function detectAndFilterDuplicates(products) {
 
       if (seenSkus.has(sku)) {
         const first = uniqueProducts.find(item => item?.id === sku);
-        for (const field of ['title', 'description', 'price', 'ean', 'weight', 'quantity', 'image_link', 'brand', 'product_type', 'manufacturer_id', 'category_id']) {
+        for (const field of ['title', 'description', 'price', 'ean', 'weight', 'image_link', 'brand', 'product_type', 'manufacturer_id', 'category_id']) {
           if (JSON.stringify(first[field] ?? null) !== JSON.stringify(product[field] ?? null)) {
             throw new Error(`SKU duplicato ${sku} con valori discordanti: ${field}.`);
           }
+        }
+        if (getEffectiveQuantity(first) !== getEffectiveQuantity(product)) {
+          throw new Error(`SKU duplicato ${sku} con valori discordanti: quantity.`);
         }
         const count = duplicatesMap.get(sku) ?? 1;
         duplicatesMap.set(sku, count + 1);

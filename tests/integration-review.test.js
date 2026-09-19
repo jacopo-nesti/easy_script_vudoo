@@ -141,6 +141,46 @@ test('Duplicati equivalenti senza nascondere prodotti invalidi', () => {
   assert.equal(result.duplicatesMap.get(source.id), 2);
   assert.throws(() => detectAndFilterDuplicates([source, { ...source, price: '30,00 EUR' }]), /discordanti/);
 });
+test('Duplicati: fallback availability uguale produce lo stesso stock', () => {
+  for (const [availability, expected] of [['in stock', 10], ['out of stock', 0]]) {
+    const product = { ...source, availability };
+    const result = detectAndFilterDuplicates([product, { ...product }]);
+    assert.equal(result.uniqueProducts.length, 1);
+    assert.equal(normalizeProduct(result.uniqueProducts[0]).quantity, expected);
+  }
+});
+test('Duplicati: availability discordante senza quantity genera sempre conflitto', () => {
+  const inStock = { ...source, availability: 'in stock' };
+  const outOfStock = { ...source, availability: 'out of stock' };
+  assert.throws(() => detectAndFilterDuplicates([inStock, outOfStock]), /discordanti: quantity/);
+  assert.throws(() => detectAndFilterDuplicates([outOfStock, inStock]), /discordanti: quantity/);
+});
+test('Duplicati: confronta lo stock effettivo e mantiene la precedenza della quantity', () => {
+  const sameQuantity = detectAndFilterDuplicates([
+    { ...source, quantity: 25, availability: 'in stock' },
+    { ...source, quantity: '25', availability: 'out of stock' },
+  ]);
+  assert.equal(sameQuantity.uniqueProducts.length, 1);
+  assert.equal(normalizeProduct(sameQuantity.uniqueProducts[0]).quantity, 25);
+
+  const zero = detectAndFilterDuplicates([
+    { ...source, quantity: 0 },
+    { ...source, availability: 'out of stock' },
+  ]);
+  assert.equal(zero.uniqueProducts.length, 1);
+  assert.equal(normalizeProduct(zero.uniqueProducts[0]).quantity, 0);
+
+  assert.throws(() => detectAndFilterDuplicates([
+    { ...source, quantity: 10 },
+    { ...source, quantity: 20 },
+  ]), /discordanti: quantity/);
+  assert.equal(normalizeProduct({ ...source, quantity: 200 }).quantity, 200);
+});
+test('Duplicati: quantity invalida non usa il fallback availability', () => {
+  const invalid = { ...source, quantity: 'abc', availability: 'in stock' };
+  assert.throws(() => normalizeProduct(invalid), /quantity deve essere un numero/);
+  assert.throws(() => detectAndFilterDuplicates([invalid, { ...invalid }]), /quantity deve essere un numero/);
+});
 test('Payload: warehouse reale, ID stretti, nessuno stock inventato', () => {
   const normalized = normalizeProduct(source);
   assert.equal(buildBasePayload(normalized, config).stock, undefined);
