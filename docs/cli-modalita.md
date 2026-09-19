@@ -1,6 +1,6 @@
 # Modalità della CLI e Comandi Disponibili
 
-Questo documento descrive le modalità di esecuzione e i comandi disponibili per la gestione, la sincronizzazione e il testing del progetto **easy_script_vudoo**.
+Questo documento descrive le modalità di esecuzione e i comandi disponibili per la gestione, la sincronizzazione e il testing del progetto **Vudoo Base Connector**.
 
 ---
 

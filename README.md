@@ -1,8 +1,8 @@
-# Easy Script Vudoo (v1.1.0)
+# Vudoo Base Connector
 
 ## 📋 Descrizione del Progetto
 
-**Easy Script Vudoo** è un applicativo Node.js progettato per gestire il flusso di sincronizzazione e aggiornamento dei prodotti da un feed XML Vudoo verso **Base.com**. Il sistema converte il file XML locale in JSON, normalizza e valida i prodotti, confronta gli SKU con il catalogo di destinazione ed esegue operazioni di creazione, aggiornamento selettivo o salto dei prodotti invariati.
+**Vudoo Base Connector** è un progetto Node.js per la sincronizzazione dei cataloghi prodotto da Vudoo verso **Base.com**, con normalizzazione e validazione dei dati, aggiornamenti selettivi, gestione stock, protezioni API e test automatici.
 
 ## ⚙️ Requisiti Principali
 
@@ -18,8 +18,8 @@ Per eseguire e sviluppare il progetto sono necessari:
 Clona il repository e installa le dipendenze locali:
 
 ```bash
-git clone https://github.com/jacopo-nesti/easy_script_vudoo.git
-cd easy_script_vudoo
+git clone https://github.com/jacopo-nesti/vudoo-base-connector.git
+cd vudoo-base-connector
 npm install
 ```
 
@@ -48,7 +48,7 @@ Per il dettaglio completo consulta la [Guida alla Configurazione](./docs/configu
 Il progetto è organizzato in modo modulare, mantenendo gli entry point nella root e la logica condivisa nella cartella `src/`:
 
 ```text
-easy_script_vudoo/
+vudoo-base-connector/
 ├── cli.js
 ├── index.js
 ├── sync.js

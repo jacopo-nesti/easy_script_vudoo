@@ -1,6 +1,6 @@
 # Architettura di Sistema
 
-Questo documento descrive l'architettura dei componenti e il ruolo dei singoli file e moduli all'interno del progetto **easy_script_vudoo**.
+Questo documento descrive l'architettura dei componenti e il ruolo dei singoli file e moduli all'interno del progetto **Vudoo Base Connector**.
 
 ---
 

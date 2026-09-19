@@ -34,7 +34,7 @@ async function main() {
   };
 
   while (true) {
-    log(`\n================================\nVUDOO → BASE.COM\n================================\nDRY_RUN: ${mode(dryRun)}\nTEST_MODE: ${mode(testMode)}\n\n0. Verifica ambiente e configurazione (Check)\n1. Converti XML → JSON\n2. Esegui controlli preliminari (Preflight Check)\n3. Sincronizza produttori\n4. Importa / aggiorna prodotti su Base.com\n5. Esegui flusso completo\n6. Esegui test automatici\n7. Esci`);
+    log(`\n================================\nVUDOO BASE CONNECTOR\n================================\nDRY_RUN: ${mode(dryRun)}\nTEST_MODE: ${mode(testMode)}\n\n0. Verifica ambiente e configurazione (Check)\n1. Converti XML → JSON\n2. Esegui controlli preliminari (Preflight Check)\n3. Sincronizza produttori\n4. Importa / aggiorna prodotti su Base.com\n5. Esegui flusso completo\n6. Esegui test automatici\n7. Esci`);
     const choice = await ask('Seleziona operazione: ');
     if (choice === null || choice === '7') return;
 

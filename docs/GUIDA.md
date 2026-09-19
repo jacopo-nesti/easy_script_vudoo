@@ -260,7 +260,7 @@ Copia il file XML nella cartella principale del progetto.
 Esempio:
 
 ```text
-products-to-base/
+vudoo-base-connector/
 │
 ├── index.js
 ├── convert_xml_to_json.js
