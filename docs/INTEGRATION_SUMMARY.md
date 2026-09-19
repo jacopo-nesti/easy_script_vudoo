@@ -262,9 +262,9 @@ Se viene specificato un ID non valido, il sistema genera errore invece di utiliz
 
 Il gruppo prezzi Default viene individuato esplicitamente.
 
-Il warehouse viene recuperato soltanto quando il prodotto contiene una quantità da sincronizzare.
+Il warehouse viene recuperato quando il prodotto contiene una quantità reale o una disponibilità che genera stock.
 
-Non vengono inventati warehouse o valori di stock fittizi.
+La quantità reale ha precedenza; in sua assenza `in stock` usa il fallback operativo 10 e `out of stock` usa 0. Il warehouse viene sempre verificato rispetto all'inventory selezionato.
 
 ---
 
@@ -371,9 +371,9 @@ Comando:
 
 La suite attuale contiene:
 
-**53 test**
+**110 test**
 
-Tutti i 53 test risultano superati nella verifica finale della release.
+Tutti i 110 test risultano superati nella verifica aggiornata della release.
 
 I test coprono, tra le altre cose:
 
@@ -533,20 +533,11 @@ L'API ha restituito:
 
 Il token è stato temporaneamente bloccato dalle API.
 
-Questo ha permesso di confermare che la gestione del rate limit non è soltanto un rischio teorico ma un caso reale da affrontare.
+Questo ha permesso di confermare che la gestione del rate limit non è soltanto un rischio teorico ma un caso reale ora coperto dalle protezioni API.
 
 La relativa Issue è stata aggiornata e portata a priorità alta.
 
-La release `v1.1.0` non introduce ancora un sistema completo di:
-
-- throttling;
-- retry;
-- backoff;
-- gestione degli esiti incerti delle scritture.
-
-Questi aspetti verranno affrontati in una fase successiva.
-
-Durante l'utilizzo corrente è quindi necessario evitare esecuzioni ripetute inutili contro Base.com.
+La release include ora rate limiting adattivo, backoff reattivo, retry limitati delle letture e verifica delle scritture con esito incerto. CREATE e UPDATE non vengono ripetuti automaticamente quando il risultato non è certo.
 
 ---
 
@@ -554,16 +545,11 @@ Durante l'utilizzo corrente è quindi necessario evitare esecuzioni ripetute inu
 
 Restano da affrontare:
 
-- gestione rate limit API;
-- gestione degli esiti incerti delle scritture;
 - miglioramento leggibilità log console;
 - confronto e sostituzione immagini già presenti sulla CDN Base.com;
 - integrità e provenienza del JSON;
-- sincronizzazione stock completa;
 - dati Vudoo mancanti;
 - connessione diretta API Vudoo;
-- aggiornamento della documentazione generale;
-- pulizia `node_modules` dal tracking Git;
 - verifica e rimozione di altri file legacy non più necessari.
 
 Questi elementi non bloccano la release `v1.1.0`, ma restano tracciati per gli sviluppi successivi.
@@ -574,16 +560,12 @@ Questi elementi non bloccano la release `v1.1.0`, ma restano tracciati per gli s
 
 Dopo la release `v1.1.0` sono pianificati:
 
-1. gestione del rate limit API e degli esiti incerti delle scritture;
-2. miglioramento della leggibilità dei log console;
-3. verifica e gestione delle immagini già presenti sulla CDN Base.com;
-4. sincronizzazione stock completa;
-5. verifica della provenienza e integrità del JSON;
-6. connessione diretta alle API Vudoo;
-7. aggiornamento della documentazione generale;
-8. rimozione di `node_modules` dal versionamento Git;
-9. cleanup dei wrapper e dei file legacy non più necessari;
-10. ampliamento progressivo della suite di test per le nuove funzionalità.
+1. miglioramento della leggibilità dei log console;
+2. verifica e gestione delle immagini già presenti sulla CDN Base.com;
+3. verifica della provenienza e integrità del JSON;
+4. connessione diretta alle API Vudoo;
+5. verifica e rimozione di altri file legacy non più necessari;
+6. ampliamento progressivo della suite di test per le nuove funzionalità.
 
 ---
 
@@ -635,12 +617,12 @@ Il file XML originale non viene modificato.
 
 La suite automatica contiene:
 
-**53 test**
+**110 test**
 
 Risultato finale:
 
-- Test: `53`
-- Passati: `53`
+- Test: `110`
+- Passati: `110`
 - Falliti: `0`
 
 La suite copre anche:
@@ -683,16 +665,14 @@ Durante le verifiche è stato raggiunto il rate limit delle API Base.com con err
 
 `ERROR_BLOCKED_TOKEN`
 
-La relativa Issue resta aperta con priorità alta per introdurre una gestione controllata del rate limit e degli esiti incerti delle richieste.
+Il progetto gestisce il caso con rate limiting preventivo e reattivo, retry controllati delle letture e verifica delle scritture con esito incerto.
 
 Restano inoltre aperti sviluppi non necessari alla `v1.1.0`, tra cui:
 
 - connessione diretta alle API Vudoo;
-- sincronizzazione stock;
 - gestione avanzata immagini;
 - miglioramento dei log;
-- documentazione generale;
-- cleanup del codice legacy.
+- connessione diretta alle API Vudoo.
 
 ---
 
@@ -709,8 +689,10 @@ Il sistema dispone ora di:
 - gestione centralizzata di categorie e produttori;
 - protezioni DRY_RUN;
 - sanitizzazione dei testi incompatibili con Base.com;
+- sincronizzazione stock;
+- rate limiting e gestione degli esiti incerti;
 - report finale;
-- 53 test automatici;
+- 110 test automatici;
 - verifica reale di idempotenza.
 
 Il progetto è quindi pronto per essere utilizzato e presentato nella configurazione attuale, mantenendo tracciati separatamente gli interventi di robustezza e sviluppo previsti per le versioni successive.

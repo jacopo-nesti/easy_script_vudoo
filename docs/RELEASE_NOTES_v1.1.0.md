@@ -157,11 +157,11 @@ Il file XML sorgente non viene modificato.
 
 La suite automatica contiene:
 
-**53 test**
+**110 test**
 
 Risultato finale:
 
-- 53 passati
+- 110 passati
 - 0 falliti
 
 La suite copre anche:
@@ -179,6 +179,9 @@ La suite copre anche:
 - errori API
 - sanitizzazione Unicode
 - idempotenza degli UPDATE
+- sincronizzazione stock e fallback da availability
+- rate limiting adattivo e retry delle letture
+- verifica delle scritture con esito incerto
 
 ---
 
@@ -208,20 +211,11 @@ Durante le verifiche intensive è stato raggiunto il rate limit delle API Base.c
 
 `ERROR_BLOCKED_TOKEN - Query limit exceeded`
 
-La relativa Issue resta aperta con priorità alta.
-
-La versione `v1.1.0` non include ancora una gestione automatica completa di:
-
-- throttling
-- retry
-- backoff
-- esiti incerti delle scritture
+Il client include ora rate limiting adattivo, backoff reattivo, retry limitati delle letture e verifica delle scritture con esito incerto, senza ripetere CREATE o UPDATE alla cieca.
 
 Restano inoltre pianificati:
 
 - connessione diretta alle API Vudoo
-- sincronizzazione stock completa
 - gestione avanzata delle immagini
 - miglioramento dei log
-- cleanup del codice legacy
-- aggiornamento ulteriore della documentazione
+- connessione diretta ai dati Vudoo senza passaggio XML manuale

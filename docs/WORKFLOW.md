@@ -76,9 +76,21 @@ Non fare push diretto su `main`.
 
 ---
 
-## 5. Testare il codice
+## 5. Testare il codice e la configurazione
 
 Prima di considerare il lavoro completato, il codice deve essere testato.
+
+Eseguire la diagnostica dell'ambiente quando la modifica coinvolge configurazione o collegamento Base.com:
+
+```bash
+npm run check
+```
+
+Eseguire sempre la suite automatica:
+
+```bash
+npm test
+```
 
 Non basta verificare un solo caso.
 
@@ -277,7 +289,7 @@ BRANCH
 ↓
 SVILUPPO
 ↓
-TEST
+TEST LOCALE E VERIFICA CONFIGURAZIONE
 ↓
 AGGIORNAMENTO CON MAIN
 ↓

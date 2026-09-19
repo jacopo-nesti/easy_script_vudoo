@@ -11,7 +11,9 @@ convert_xml_to_json.js
         ↓
 real_products.json
         ↓
-index.js
+Preflight e normalizzazione
+        ↓
+Confronto SKU → CREATE / UPDATE / SKIP
         ↓
 API Base.com
         ↓
@@ -150,10 +152,10 @@ Se un token viene accidentalmente pubblicato o inserito nella cronologia Git, de
 
 Indica l'inventory Base.com nel quale verranno importati i prodotti.
 
-Esempio inventory Wally di test:
+Se vuoi selezionare esplicitamente un inventory:
 
 ```env
-BASE_INVENTORY_ID=115966
+BASE_INVENTORY_ID=ID_INVENTORY
 ```
 
 Lo script verifica tramite API che l'inventory esista e recupera automaticamente il gruppo prezzi associato.
@@ -168,7 +170,7 @@ Indica il warehouse Base.com da utilizzare quando è necessario gestire quantit�
 BASE_WAREHOUSE_ID=
 ```
 
-Se il catalogo non contiene quantità numeriche di stock, questa configurazione può non essere necessaria.
+Il warehouse è necessario anche quando la quantità viene ricavata da `availability`. Lo script verifica tramite API che appartenga all'inventory selezionato; non vengono usati ID hardcoded.
 
 ---
 
@@ -198,7 +200,7 @@ Decide **se effettuare realmente modifiche su Base.com**.
 DRY_RUN=true
 ```
 
-→ esegue controlli e genera il payload, ma **non crea prodotti**.
+→ esegue controlli e genera il payload, ma **non crea né aggiorna risorse su Base.com**.
 
 ```env
 DRY_RUN=false
@@ -265,43 +267,22 @@ products-to-base/
 ├── package.json
 ├── .env
 ├── .env.example
-└── Wally-1925-product-feed.xml
+└── VUDOO.xml
 ```
 
 I file `.xml` sono esclusi dalla repository tramite `.gitignore`.
 
 ---
 
-# 6. Imposta il file XML da convertire
+# 6. Prepara il file XML da convertire
 
-Apri:
-
-```text
-convert_xml_to_json.js
-```
-
-Trova la riga che legge il file XML:
-
-```javascript
-const xml = await readFile(
-  new URL('./NOME_FILE.xml', import.meta.url),
-  'utf8'
-);
-```
-
-Sostituisci:
+Salva il feed nella root del progetto con il nome:
 
 ```text
-NOME_FILE.xml
+VUDOO.xml
 ```
 
-con il nome esatto del file appena scaricato.
-
-Esempio:
-
-```javascript
-new URL('./Wally-1925-product-feed.xml', import.meta.url)
-```
+Non è necessario modificare il convertitore.
 
 ---
 
@@ -393,10 +374,10 @@ TEST_MODE=true
 DRY_RUN=true
 ```
 
-Avvia lo script:
+Esegui direttamente l'importazione in modalità sicura:
 
 ```bash
-npm start
+npm run import
 ```
 
 In questa configurazione:
@@ -426,10 +407,10 @@ TEST_MODE=true
 DRY_RUN=false
 ```
 
-Poi:
+Poi esegui l'importazione diretta oppure usa l'opzione 4 della CLI:
 
 ```bash
-npm start
+npm run import
 ```
 
 In questo modo viene processato realmente un solo prodotto.
@@ -440,7 +421,8 @@ Il riepilogo sarà simile a:
 Prodotti letti: 157
 Prodotti selezionati: 1
 Prodotti processati: 1
-Importati: 1
+Creati: 1
+Aggiornati: 0
 Simulati: 0
 Errori: 0
 ```
@@ -475,7 +457,7 @@ DRY_RUN=false
 Poi esegui:
 
 ```bash
-npm start
+npm run import
 ```
 
 Lo script processerà tutti i prodotti presenti in:
@@ -500,11 +482,11 @@ SKU
 Ricerca su Base.com
     ↓
 SKU presente?
-├── SÌ → SKIPPED
-└── NO → IMPORT
+├── SÌ → confronto → UPDATE oppure SKIPPED
+└── NO → CREATE
 ```
 
-Se lo SKU esiste:
+Se lo SKU esiste e i dati sono invariati:
 
 ```text
 SKIPPED
@@ -522,6 +504,8 @@ BASE_INVENTORY_ID=
 
 Questo permette di rilanciare lo script senza creare duplicati dello stesso SKU.
 
+Se lo SKU esiste, il prodotto viene confrontato con Base.com: i campi modificati generano un UPDATE selettivo, mentre un prodotto invariato viene saltato. Se lo stesso SKU identifica più prodotti Base.com, l'operazione viene bloccata come ambigua.
+
 ---
 
 # Stati principali
@@ -532,7 +516,7 @@ Il prodotto è stato creato correttamente su Base.com.
 
 ## `SKIPPED`
 
-Il prodotto possiede uno SKU già presente nell'inventory selezionato.
+Il prodotto possiede uno SKU già presente nell'inventory selezionato e non presenta modifiche da inviare.
 
 ## `ERROR`
 
@@ -578,6 +562,19 @@ DRY_RUN=false
 
 ---
 
+# Gestione stock
+
+La quantità numerica presente nel prodotto viene mantenuta, anche se superiore a 10. Quando la quantità manca, è `null` o è una stringa vuota, viene usata `availability`:
+
+```text
+in stock → 10
+out of stock → 0
+```
+
+Il valore 10 è un fallback operativo, non una quantità massima. Lo stock viene associato al warehouse verificato dell'inventory selezionato. Se il valore su Base.com è già corretto non viene inviato un UPDATE stock.
+
+---
+
 # Comandi principali
 
 ## Installazione dipendenze
@@ -595,7 +592,37 @@ npm run convert
 ## Avvio importazione
 
 ```bash
+npm run import
+```
+
+## Menu interattivo
+
+```bash
 npm start
+```
+
+## Verifica configurazione
+
+```bash
+npm run check
+```
+
+## Sincronizzazione completa
+
+```bash
+npm run sync
+```
+
+## Sincronizzazione produttori
+
+```bash
+npm run productor
+```
+
+## Test automatici
+
+```bash
+npm test
 ```
 
 ## Versione Node.js
@@ -627,23 +654,23 @@ Per un nuovo utilizzo del progetto:
         ↓
 5. Scarica XML da Vudoo
         ↓
-6. Imposta il nome XML nel convertitore
+6. Salva il feed come VUDOO.xml
         ↓
 7. npm run convert
         ↓
 8. TEST_MODE=true + DRY_RUN=true
         ↓
-9. npm start
+9. npm run import
         ↓
 10. TEST_MODE=true + DRY_RUN=false
         ↓
-11. npm start
+11. npm run import
         ↓
 12. Controlla il prodotto su Base.com
         ↓
 13. TEST_MODE=false + DRY_RUN=false
         ↓
-14. npm start
+14. npm run import
 ```
 
 ---
