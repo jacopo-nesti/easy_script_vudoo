@@ -53,9 +53,8 @@ Responsabilità principali:
 - `sync.js`
   - entry point per il flusso completo non interattivo.
 
-`update-inventory.js` non contiene più la logica principale di UPDATE.
-
-È rimasto come wrapper di compatibilità verso le nuove funzioni presenti nei moduli `src`.
+Il precedente wrapper `update-inventory.js` è stato rimosso perché non più utilizzato.
+La logica UPDATE è disponibile nei moduli `src` usati direttamente dall'applicazione.
 
 ---
 
@@ -565,7 +564,6 @@ Restano da affrontare:
 - connessione diretta API Vudoo;
 - aggiornamento della documentazione generale;
 - pulizia `node_modules` dal tracking Git;
-- eventuale rimozione futura del wrapper `update-inventory.js`;
 - verifica e rimozione di altri file legacy non più necessari.
 
 Questi elementi non bloccano la release `v1.1.0`, ma restano tracciati per gli sviluppi successivi.
