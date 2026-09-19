@@ -192,8 +192,16 @@ La suite corrente comprende **110 test** dedicati a CLI, parsing, normalizzazion
 
 L'evoluzione principale prevista è la sostituzione del passaggio manuale tramite XML con un'integrazione diretta ai dati o alle API Vudoo, mantenendo la normalizzazione e le protezioni Base.com già presenti.
 
-## Autori e contributi
+## 👥 Autori e contributi
 
 Il progetto è stato ideato, progettato e coordinato da **Jacopo Nesti**, che ne ha curato anche lo sviluppo principale durante il periodo di stage.
 
-Lo sviluppo è stato portato avanti con il supporto e i contributi del team degli altri stagisti, che hanno collaborato su attività specifiche, test, documentazione e miglioramenti del progetto.
+Lo sviluppo è stato portato avanti con il supporto e i contributi del team di stagisti, che ha collaborato su attività specifiche, test, documentazione e miglioramenti del progetto.
+
+### Contributors
+
+- **Davide Baragli** — sviluppo e miglioramenti tecnici
+- **Leonardo Roschi** — sviluppo e attività di supporto
+- **Ian Cavini** — documentazione e contributi al progetto
+- **Hudson (WoodTrue)** — sviluppo e attività di manutenzione
+- **Grecia** — sviluppo, test e attività di supporto
