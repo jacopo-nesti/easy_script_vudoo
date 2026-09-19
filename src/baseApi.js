@@ -2,27 +2,126 @@ import { token, inventoryId, warehouseId, dryRun } from './config.js';
 import { log } from './logger.js';
 import { buildBasePayload, buildBaseUpdatePayload } from './products.js';
 
-export async function callBase(method, parameters = {}) {
-  if (!['true', 'false'].includes(dryRun)) throw new Error('DRY_RUN deve essere true oppure false.');
-  if (dryRun === 'true' && !method.startsWith('get')) {
-    throw new Error(`DRY_RUN: scrittura ${method} bloccata.`);
-  }
-  const response = await fetch('https://api.baselinker.com/connector.php', {
-    method: 'POST',
-    headers: { 'X-BLToken': token },
-    body: new URLSearchParams({ method, parameters: JSON.stringify(parameters) }),
-    signal: AbortSignal.timeout(30000),
-  });
+const readMethods = new Set([
+  'getInventories', 'getInventoryPriceGroups', 'getInventoryWarehouses',
+  'getInventoryManufacturers', 'getInventoryCategories',
+  'getInventoryProductsList', 'getInventoryProductsData',
+]);
+let requestQueue = Promise.resolve();
+let nextRequestAt = 0;
+const requestTimes = [];
+const uncertainWrites = new Map();
 
+async function waitForRequestSlot(windowMs, safeLimit, softLimit) {
+  while (true) {
+    const now = Date.now();
+    while (requestTimes.length && requestTimes[0] <= now - windowMs) requestTimes.shift();
+
+    let preventiveWaitUntil = 0;
+    const count = requestTimes.length;
+    if (count >= safeLimit) {
+      preventiveWaitUntil = requestTimes[0] + windowMs;
+    } else if (count > 0 && count >= softLimit) {
+      const pressure = (count - softLimit + 1) / (safeLimit - softLimit);
+      const spacing = Math.ceil(windowMs / safeLimit * pressure);
+      preventiveWaitUntil = Math.min(requestTimes[count - 1] + spacing, requestTimes[0] + windowMs);
+    }
+
+    const wait = Math.max(nextRequestAt, preventiveWaitUntil) - now;
+    if (wait <= 0) return;
+    log(`[RATE LIMIT] Attesa ${wait} ms prima della prossima richiesta Base.com (${count}/${safeLimit} nella finestra)`);
+    await new Promise(resolve => setTimeout(resolve, Math.min(wait, 2147483647)));
+  }
+}
+
+function apiSetting(name, fallback, minimum, maximum) {
+  const raw = process.env[name] ?? String(fallback);
+  const value = Number(raw);
+  if (!/^\d+$/.test(raw) || !Number.isSafeInteger(value) || value < minimum || value > maximum) {
+    throw new Error(`${name} deve essere un intero tra ${minimum} e ${maximum}.`);
+  }
+  return value;
+}
+
+function apiError(message, temporary = false, uncertain = false, retryAfterMs = 0) {
+  return Object.assign(new Error(message), { temporary, uncertain, retryAfterMs });
+}
+
+function retryAfter(response) {
+  const value = response.headers?.get('retry-after');
+  if (!value) return 0;
+  const milliseconds = /^\d+(\.\d+)?$/.test(value)
+    ? Number(value) * 1000 : Date.parse(value) - Date.now();
+  return Number.isFinite(milliseconds) ? Math.max(0, milliseconds) : 0;
+}
+
+async function requestBase(method, body, readOnly, rateLimitDelay) {
+  let response;
+  try {
+    requestTimes.push(Date.now());
+    response = await fetch('https://api.baselinker.com/connector.php', {
+      method: 'POST',
+      headers: { 'X-BLToken': token },
+      body,
+      signal: AbortSignal.timeout(30000),
+    });
+  } catch (error) {
+    throw apiError(`${method}: rete/timeout: ${error.message}`, true, !readOnly);
+  }
   if (!response.ok) {
-    throw new Error(`${method}: HTTP ${response.status}`);
+    const temporary = [408, 429, 500, 502, 503, 504].includes(response.status);
+    const wait = Math.max(retryAfter(response), response.status === 429 ? rateLimitDelay : 0);
+    throw apiError(`${method}: HTTP ${response.status}`, temporary,
+      !readOnly && (response.status === 408 || response.status >= 500), wait);
   }
-
-  const data = await response.json();
-  if (data.status !== 'SUCCESS') {
-    throw new Error(`${method}: ${data.error_code ?? 'ERROR'} - ${data.error_message ?? 'Risposta API non valida'}`);
+  let data;
+  try {
+    data = await response.json();
+  } catch {
+    throw apiError(`${method}: risposta JSON non leggibile`, true, !readOnly);
+  }
+  if (data?.status === 'ERROR') {
+    const limited = data.error_code === 'ERROR_BLOCKED_TOKEN';
+    throw apiError(`${method}: ${data.error_code ?? 'ERROR'} - ${data.error_message ?? 'Errore API'}`,
+      limited, false, limited ? Math.max(rateLimitDelay, retryAfter(response)) : 0);
+  }
+  if (data?.status !== 'SUCCESS') {
+    throw apiError(`${method}: risposta API non valida`, true, !readOnly);
   }
   return data;
+}
+
+export async function callBase(method, parameters = {}) {
+  if (!['true', 'false'].includes(dryRun)) throw new Error('DRY_RUN deve essere true oppure false.');
+  const readOnly = readMethods.has(method);
+  if (dryRun === 'true' && !readOnly) {
+    throw new Error(`DRY_RUN: scrittura ${method} bloccata.`);
+  }
+  const windowMs = apiSetting('BASE_API_WINDOW_MS', 60000, 1, 3600000);
+  const safeLimit = apiSetting('BASE_API_SAFE_LIMIT', 90, 1, 100000);
+  const softLimit = apiSetting('BASE_API_SOFT_LIMIT', 80, 0, safeLimit - 1);
+  const attempts = apiSetting('BASE_API_READ_ATTEMPTS', 3, 1, 10);
+  const retryDelay = apiSetting('BASE_API_RETRY_DELAY_MS', 1000, 1, 3600000);
+  const rateLimitDelay = apiSetting('BASE_API_RATE_LIMIT_DELAY_MS', 60000, 1, 3600000);
+  const body = new URLSearchParams({ method, parameters: JSON.stringify(parameters) });
+  const key = body.toString();
+  const run = requestQueue.then(async () => {
+    if (!readOnly && uncertainWrites.has(key)) throw uncertainWrites.get(key);
+    for (let attempt = 1; attempt <= (readOnly ? attempts : 1); attempt++) {
+      await waitForRequestSlot(windowMs, safeLimit, softLimit);
+      try {
+        return await requestBase(method, body, readOnly, rateLimitDelay);
+      } catch (error) {
+        nextRequestAt = Math.max(nextRequestAt, Date.now() + (error.retryAfterMs ?? 0));
+        if (error.uncertain) uncertainWrites.set(key, error);
+        if (!readOnly || !error.temporary || attempt === attempts) throw error;
+        nextRequestAt = Math.max(nextRequestAt, Date.now() + retryDelay * 2 ** (attempt - 1));
+        log(`[RETRY] ${method}: ${error.message}; tentativo ${attempt + 1}/${attempts}`);
+      }
+    }
+  });
+  requestQueue = run.catch(() => {});
+  return run;
 }
 
 export async function getBaseInventory() {
@@ -136,7 +235,7 @@ export async function updateProductInBase(productId, product, config, existing) 
     log('DRY_RUN: nessuna scrittura su Base.com');
     return null;
   }
-  return await callBase('addInventoryProduct', payload);
+  return await writeProductAndVerify(payload, product.sku);
 }
 
 export async function sendProductToBase(product, config) {
@@ -146,5 +245,67 @@ export async function sendProductToBase(product, config) {
     log('DRY_RUN: nessuna scrittura su Base.com');
     return null;
   }
-  return await callBase('addInventoryProduct', payload);
+  return await writeProductAndVerify(payload, product.sku);
+}
+
+function writtenValuesMatch(payload, details, sku) {
+  if (details.sku !== sku) return false;
+  for (const [field, value] of Object.entries(payload)) {
+    if (['inventory_id', 'product_id', 'sku'].includes(field)) continue;
+    if (['text_fields', 'prices', 'stock'].includes(field)) {
+      for (const [key, desired] of Object.entries(value)) {
+        const current = details[field]?.[key];
+        if (current == null) return false;
+        if (field === 'text_fields' ? String(current) !== String(desired) : !sameNumber(current, desired)) return false;
+      }
+    } else if (field === 'images') {
+      for (const [position, desired] of Object.entries(value)) {
+        const current = details.images?.[Number(position) + 1];
+        if (typeof current !== 'string' || current.replace(/^url:/, '') !== desired.replace(/^url:/, '')) return false;
+      }
+    } else if (field === 'ean') {
+      if (details[field] == null || String(details[field]) !== String(value)) return false;
+    } else if (['weight', 'manufacturer_id', 'category_id'].includes(field)) {
+      if (!sameNumber(details[field], value)) return false;
+    } else {
+      return false;
+    }
+  }
+  return true;
+}
+
+function sameNumber(current, desired) {
+  return (typeof current === 'number' || (typeof current === 'string' && current.trim() !== '')) &&
+    Number.isFinite(Number(current)) && Number(current) === Number(desired);
+}
+
+async function writeProductAndVerify(payload, sku) {
+  const operation = payload.product_id == null ? 'CREATE' : 'UPDATE';
+  try {
+    const result = await callBase('addInventoryProduct', payload);
+    const id = Number(result.product_id);
+    if (!Number.isSafeInteger(id) || id <= 0 || (payload.product_id != null && id !== payload.product_id)) {
+      throw apiError('addInventoryProduct: conferma senza product_id valido/corrispondente', false, true);
+    }
+    return result;
+  } catch (error) {
+    if (!error.uncertain) throw error;
+    const key = new URLSearchParams({ method: 'addInventoryProduct', parameters: JSON.stringify(payload) }).toString();
+    uncertainWrites.set(key, error);
+    log(`[UNCERTAIN] ${operation} SKU ${sku}: ${error.message}; verifica read-only...`);
+    try {
+      const match = payload.product_id == null
+        ? await findProductInBase(sku, payload.inventory_id)
+        : { product_id: payload.product_id };
+      if (!match) throw new Error('Nessun prodotto trovato tramite SKU; possibile visibilita ritardata.');
+      const details = await getBaseProductDetails(payload.inventory_id, match.product_id);
+      if (!writtenValuesMatch(payload, details, sku)) {
+        throw new Error('Stato non corrispondente o campi inviati non verificabili (incluse eventuali immagini CDN).');
+      }
+      log(`[UNCERTAIN] ${operation} SKU ${sku}: stato desiderato verificato, operazione confermata.`);
+      return { status: 'SUCCESS', product_id: match.product_id, confirmed_after_uncertain: true };
+    } catch (verificationError) {
+      throw apiError(`${operation} SKU ${sku}: esito incerto (${error.message}); verifica: ${verificationError.message}`, false, true);
+    }
+  }
 }

@@ -63,8 +63,12 @@ test('UPDATE: i punti interrogativi già salvati richiedono una sola pulizia', (
 
 async function sandbox(options = {}) {
   const calls = [], logs = [], writes = new Map();
+  const waits = [];
+  let now = 0;
   const processMock = { env: { BASE_API_TOKEN: 'test-only-token', TEST_MODE: 'true', DRY_RUN: 'true', ...options.env }, exitCode: 0 };
   const context = vm.createContext({
+    Date: { now: () => now, parse: Date.parse },
+    setTimeout: (resolve, milliseconds) => { waits.push(milliseconds); now += milliseconds; resolve(); },
     URL, URLSearchParams, AbortSignal, process: processMock,
     console: { log: (...args) => logs.push(args.join(' ')), warn: (...args) => logs.push(args.join(' ')), error: (...args) => logs.push(args.join(' ')) },
     fetch: async (url, request) => {
@@ -74,7 +78,9 @@ async function sandbox(options = {}) {
       assert.ok(request.signal);
       const method = request.body.get('method');
       const parameters = JSON.parse(request.body.get('parameters'));
-      calls.push({ method, parameters });
+      calls.push({ method, parameters, at: now });
+      const custom = await options.response?.(method, parameters, calls);
+      if (custom !== undefined) return custom;
       if (options.httpError) return { ok: false, status: 503 };
       if (options.networkError) throw new Error('Rete simulata non disponibile');
       const responses = {
@@ -118,9 +124,9 @@ async function sandbox(options = {}) {
   const module = load(new URL(options.entry ?? '../index.js', import.meta.url).href);
   await module.link((specifier, parent) => load(specifier.startsWith('.') ? new URL(specifier, parent.identifier).href : specifier));
   await module.evaluate();
-  if (options.action) await options.action(module.namespace);
+  if (options.action) await options.action(module.namespace, { calls, logs, waits, advance: milliseconds => { now += milliseconds; } });
   for (let i = 0; i < 30; i++) await new Promise(resolve => setImmediate(resolve));
-  return { calls, logs, writes, exitCode: processMock.exitCode };
+  return { calls, logs, writes, waits, exitCode: processMock.exitCode };
 }
 
 for (const [value, unit, expected] of [['25,00 EUR', 'EUR', 25], ['999,00 EUR', 'EUR', 999], ['1.098,00 EUR', 'EUR', 1098], ['4.880,00 EUR', 'EUR', 4880], ['0.1 Kg', 'Kg', 0.1], ['1.234.567,89 EUR', 'EUR', 1234567.89]]) {
@@ -284,3 +290,426 @@ test('Convertitore eseguito in memoria senza sovrascrivere il JSON locale', asyn
   assert.equal(products[0].tax_rate, '22');
   assert.equal(result.calls.length, 0);
 });
+
+
+const successResponse = data => ({ ok: true, json: async () => ({ status: 'SUCCESS', ...data }) });
+const writeTimeout = method => {
+  if (method === 'addInventoryProduct') throw Object.assign(new Error('Risposta persa'), { name: 'TimeoutError' });
+};
+
+test('API: lettura riuscita al primo tentativo', async () => {
+  const result = await sandbox({ entry: '../src/baseApi.js', action: api => api.callBase('getInventories') });
+  assert.equal(result.calls.length, 1);
+  assert.equal(result.waits.length, 0);
+});
+
+test('API: HTTP 503 temporaneo, poi lettura riuscita', async () => {
+  const result = await sandbox({ entry: '../src/baseApi.js',
+    response: (method, parameters, calls) => calls.length === 1 ? { ok: false, status: 503 } : undefined,
+    action: api => api.callBase('getInventories'),
+  });
+  assert.equal(result.calls.length, 2);
+  assert.ok(result.logs.some(line => line.includes('tentativo 2/3')));
+});
+
+for (const response of [
+  { ok: false, status: 400 },
+  { ok: true, json: async () => ({ status: 'ERROR', error_code: 'BAD_INPUT', error_message: 'Dati errati' }) },
+]) {
+  test('API: errore definitivo senza retry ' + (response.status ?? 'BAD_INPUT'), async () => {
+    const result = await sandbox({ entry: '../src/baseApi.js', response: () => response,
+      action: api => assert.rejects(api.callBase('getInventories'), error => error.temporary === false),
+    });
+    assert.equal(result.calls.length, 1);
+  });
+}
+
+test('API: rete instabile, limite 3 tentativi e attesa progressiva', async () => {
+  const result = await sandbox({ entry: '../src/baseApi.js', networkError: true,
+    action: api => assert.rejects(api.callBase('getInventories'), /Rete simulata/),
+  });
+  assert.equal(result.calls.length, 3);
+  assert.deepEqual(result.waits, [1000, 2000]);
+});
+
+test('API: limite configurabile di un tentativo', async () => {
+  const result = await sandbox({ entry: '../src/baseApi.js', httpError: true, env: { BASE_API_READ_ATTEMPTS: '1' },
+    action: api => assert.rejects(api.callBase('getInventories'), /503/),
+  });
+  assert.equal(result.calls.length, 1);
+});
+
+test('API: poche chiamate concorrenti senza attesa artificiale', async () => {
+  const result = await sandbox({ entry: '../src/baseApi.js',
+    action: api => Promise.all([api.callBase('getInventories'), api.callBase('getInventoryPriceGroups'), api.callBase('getInventoryCategories')]),
+  });
+  assert.deepEqual(result.calls.map(call => call.at), [0, 0, 0]);
+  assert.deepEqual(result.waits, []);
+});
+
+for (const header of ['5', 'Thu, 01 Jan 1970 00:00:05 GMT']) {
+  test('API: HTTP 429 rispetta Retry-After ' + header, async () => {
+    const result = await sandbox({ entry: '../src/baseApi.js', env: { BASE_API_RATE_LIMIT_DELAY_MS: '100' },
+      response: (method, parameters, calls) => calls.length === 1
+        ? { ok: false, status: 429, headers: { get: () => header } } : undefined,
+      action: api => api.callBase('getInventories'),
+    });
+    assert.deepEqual(result.waits, [5000]);
+    assert.equal(result.calls.length, 2);
+  });
+}
+
+test('API: ERROR_BLOCKED_TOKEN applica pausa condivisa anche dopo esaurimento tentativi', async () => {
+  const result = await sandbox({ entry: '../src/baseApi.js', env: { BASE_API_READ_ATTEMPTS: '1', BASE_API_RATE_LIMIT_DELAY_MS: '9000' },
+    response: (method, parameters, calls) => calls.length === 1
+      ? { ok: true, json: async () => ({ status: 'ERROR', error_code: 'ERROR_BLOCKED_TOKEN', error_message: 'Query limit exceeded' }) } : undefined,
+    action: async api => {
+      await assert.rejects(api.callBase('getInventories'), /ERROR_BLOCKED_TOKEN/);
+      await api.callBase('getInventoryPriceGroups');
+    },
+  });
+  assert.deepEqual(result.calls.map(call => call.at), [0, 9000]);
+});
+
+test('API: configurazione rate limiter non valida blocca prima della rete', async () => {
+  const result = await sandbox({ entry: '../src/baseApi.js', env: { BASE_API_READ_ATTEMPTS: 'NaN' },
+    action: api => assert.rejects(api.callBase('getInventories'), /BASE_API_READ_ATTEMPTS/),
+  });
+  assert.equal(result.calls.length, 0);
+});
+
+test('CREATE: successo normale, una scrittura e nessuna riconciliazione', async () => {
+  const result = await sandbox({ entry: '../src/baseApi.js', env: { DRY_RUN: 'false' },
+    action: async api => assert.equal((await api.sendProductToBase(normalizeProduct(source), config)).product_id, 60),
+  });
+  assert.deepEqual(result.calls.map(call => call.method), ['addInventoryProduct']);
+});
+
+for (const failure of ['timeout', '503', 'json', 'missing-id', 'missing-status']) {
+  test('CREATE incerta: ' + failure + ', SKU e valori confermati senza seconda CREATE', async () => {
+    const result = await sandbox({ entry: '../src/baseApi.js', env: { DRY_RUN: 'false' }, existing: true,
+      response: method => {
+        if (method !== 'addInventoryProduct') return;
+        if (failure === 'timeout') return writeTimeout(method);
+        if (failure === '503') return { ok: false, status: 503 };
+        if (failure === 'json') return { ok: true, json: async () => { throw new Error('JSON troncato'); } };
+        if (failure === 'missing-id') return successResponse({});
+        return { ok: true, json: async () => ({}) };
+      },
+      action: async api => {
+        const result = await api.sendProductToBase(normalizeProduct(source), config);
+        assert.equal(result.product_id, 60);
+        assert.equal(result.confirmed_after_uncertain, true);
+      },
+    });
+    assert.deepEqual(result.calls.map(call => call.method), ['addInventoryProduct', 'getInventoryProductsList', 'getInventoryProductsData']);
+    const lookup = result.calls[1].parameters;
+    assert.equal(lookup.inventory_id, 10);
+    assert.equal(lookup.filter_sku, source.id);
+  });
+}
+
+for (const scenario of ['absent', 'ambiguous', 'different', 'read-failed', 'cdn']) {
+  test('CREATE incerta: ' + scenario + ' resta incerta e non viene ritentata', async () => {
+    const result = await sandbox({ entry: '../src/baseApi.js', env: { DRY_RUN: 'false' }, existing: scenario !== 'absent',
+      matches: scenario === 'ambiguous' ? { 60: { sku: source.id }, 61: { sku: source.id } } : undefined,
+      details: scenario === 'different' ? { ...details, text_fields: { name: 'Altro' } }
+        : scenario === 'cdn' ? { ...details, images: { 1: 'https://upload.cdn.baselinker.com/unknown.jpg' } } : undefined,
+      response: method => {
+        if (scenario === 'read-failed' && method === 'getInventoryProductsList') throw new Error('Rete verifica assente');
+        return writeTimeout(method);
+      },
+      action: api => assert.rejects(api.sendProductToBase(normalizeProduct({ ...source,
+        ...(scenario === 'cdn' ? { image_link: 'https://example.org/image.jpg' } : {}),
+      }), config), error => error.uncertain === true && (scenario !== 'ambiguous' || /ambiguo/.test(error.message))),
+    });
+    assert.equal(result.calls.filter(call => call.method === 'addInventoryProduct').length, 1);
+  });
+}
+
+test('CREATE: rifiuto API definitivo senza retry o riconciliazione', async () => {
+  const result = await sandbox({ entry: '../src/baseApi.js', env: { DRY_RUN: 'false' },
+    response: () => ({ ok: true, json: async () => ({ status: 'ERROR', error_code: 'INVALID_DATA' }) }),
+    action: api => assert.rejects(api.sendProductToBase(normalizeProduct(source), config), error => !error.uncertain),
+  });
+  assert.equal(result.calls.length, 1);
+});
+
+test('UPDATE incerto: verifica lo stesso ID e solo i valori inviati', async () => {
+  const result = await sandbox({ entry: '../src/baseApi.js', env: { DRY_RUN: 'false' }, response: writeTimeout,
+    details: { ...details, text_fields: { name: 'Modifica esterna non inviata' } },
+    action: async api => {
+      const result = await api.updateProductInBase(60, normalizeProduct(source), config, { ...details, prices: { 20: 24 } });
+      assert.equal(result.product_id, 60);
+      assert.equal(result.confirmed_after_uncertain, true);
+    },
+  });
+  assert.deepEqual(result.calls.map(call => call.method), ['addInventoryProduct', 'getInventoryProductsData']);
+  assert.equal(result.calls[1].parameters.products[0], 60);
+});
+
+for (const scenario of ['different', 'wrong-sku', 'read-failed']) {
+  test('UPDATE incerto: ' + scenario + ' non conferma e non ripete la scrittura', async () => {
+    const result = await sandbox({ entry: '../src/baseApi.js', env: { DRY_RUN: 'false' },
+      details: { ...details, ...(scenario === 'wrong-sku' ? { sku: 'ALTRO' } : { prices: { 20: 24 } }) },
+      response: method => {
+        if (scenario === 'read-failed' && method === 'getInventoryProductsData') throw new Error('Verifica non disponibile');
+        return writeTimeout(method);
+      },
+      action: api => assert.rejects(api.updateProductInBase(60, normalizeProduct(source), config,
+        { ...details, prices: { 20: 24 } }), error => error.uncertain === true),
+    });
+    assert.equal(result.calls.filter(call => call.method === 'addInventoryProduct').length, 1);
+  });
+}
+
+test('Report: SKU incerto separato dagli errori, prosecuzione e uscita non riuscita', async () => {
+  const result = await sandbox({ env: { DRY_RUN: 'false', TEST_MODE: 'false' },
+    products: [source, { ...source, id: 'SKU-B' }],
+    response: (method, parameters) => { if (method === 'addInventoryProduct' && parameters.sku === source.id) return writeTimeout(method); },
+  });
+  assert.equal(result.exitCode, 1);
+  for (const line of ['Esiti incerti: 1', 'SKU con esito incerto: SKU-A', 'Errori: 0', 'Creati: 1']) {
+    assert.ok(result.logs.some(log => log.includes(line)), line);
+  }
+  assert.equal(result.calls.filter(call => call.method === 'addInventoryProduct').length, 2);
+});
+
+test('Report: CREATE confermata dopo incertezza conteggiata come creata', async () => {
+  const result = await sandbox({ env: { DRY_RUN: 'false' },
+    response: (method, parameters, calls) => {
+      if (method === 'addInventoryProduct') return writeTimeout(method);
+      if (method === 'getInventoryProductsList' && calls.some(call => call.method === 'addInventoryProduct')) {
+        return successResponse({ products: { 60: { sku: source.id } } });
+      }
+    },
+  });
+  assert.equal(result.exitCode, 0);
+  assert.ok(result.logs.some(log => log.includes('Creati: 1')));
+  assert.ok(result.logs.some(log => log.includes('Esiti incerti: 0')));
+});
+
+test('DRY_RUN: nessuna scrittura o riconciliazione, gate chiuso anche per metodi sconosciuti', async () => {
+  const result = await sandbox({ entry: '../src/baseApi.js', action: async api => {
+    for (const method of ['addInventoryProduct', 'addInventoryManufacturer', 'addInventoryCategory', 'getUnknownOperation']) {
+      await assert.rejects(api.callBase(method, {}), /bloccata/);
+    }
+    assert.equal(await api.sendProductToBase(normalizeProduct(source), config), null);
+    assert.equal(await api.updateProductInBase(60, normalizeProduct(source), config, { ...details, prices: { 20: 24 } }), null);
+  } });
+  assert.equal(result.calls.length, 0);
+});
+
+test('Scrittura incerta ripresentata nel processo: nessun nuovo invio, anche per categorie', async () => {
+  const result = await sandbox({ entry: '../src/baseApi.js', env: { DRY_RUN: 'false' }, networkError: true,
+    action: async api => {
+      for (let i = 0; i < 2; i++) {
+        await assert.rejects(api.callBase('addInventoryCategory', { inventory_id: 10, name: 'Casa', parent_id: 0 }), error => error.uncertain === true);
+      }
+    },
+  });
+  assert.equal(result.calls.length, 1);
+});
+
+
+test('UPDATE: successo ordinario mantiene product_id e non verifica di nuovo', async () => {
+  const result = await sandbox({ entry: '../src/baseApi.js', env: { DRY_RUN: 'false' },
+    action: async api => assert.equal((await api.updateProductInBase(60, normalizeProduct(source), config,
+      { ...details, prices: { 20: 24 } })).product_id, 60),
+  });
+  assert.equal(result.calls.length, 1);
+  assert.equal(result.calls[0].parameters.product_id, 60);
+});
+
+test('CREATE incerta: SKU diverso nel dettaglio non conferma identita', async () => {
+  await sandbox({ entry: '../src/baseApi.js', env: { DRY_RUN: 'false' }, existing: true,
+    details: { ...details, sku: 'ALTRO' }, response: writeTimeout,
+    action: api => assert.rejects(api.sendProductToBase(normalizeProduct(source), config), error => error.uncertain),
+  });
+});
+
+test('UPDATE incerto: stock vuoto non conferma quantita zero', async () => {
+  await sandbox({ entry: '../src/baseApi.js', env: { DRY_RUN: 'false' },
+    details: { ...details, stock: { bl_30: '' } }, response: writeTimeout,
+    action: api => assert.rejects(api.updateProductInBase(60, { ...normalizeProduct(source), quantity: 0 }, config,
+      { ...details, stock: { bl_30: 2 } }), error => error.uncertain),
+  });
+});
+
+test('CREATE incerta: tutti i campi inviati corrispondono, anche EAN stock e immagine', async () => {
+  const product = { ...normalizeProduct(source), ean: '12345678', quantity: 2, image_link: 'https://example.org/a.jpg', manufacturer_id: 40, category_id: 51 };
+  await sandbox({ entry: '../src/baseApi.js', env: { DRY_RUN: 'false' }, existing: true, response: writeTimeout,
+    details: { ...details, ean: '12345678', stock: { bl_30: '2' }, images: { 1: 'https://example.org/a.jpg' } },
+    action: async api => assert.equal((await api.sendProductToBase(product, config)).confirmed_after_uncertain, true),
+  });
+});
+
+test('UPDATE incerto: errore riportato separatamente nel main', async () => {
+  const result = await sandbox({ env: { DRY_RUN: 'false' }, existing: true, details: { ...details, prices: { 20: 24 } }, response: writeTimeout });
+  assert.equal(result.exitCode, 1);
+  assert.ok(result.logs.some(line => line.includes('Esiti incerti: 1')));
+  assert.ok(result.logs.some(line => line.includes('Aggiornati: 0')));
+  assert.ok(result.logs.some(line => line.includes('Errori: 0')));
+  assert.equal(result.calls.filter(call => call.method === 'addInventoryProduct').length, 1);
+});
+
+test('UPDATE confermato dopo timeout conteggiato come aggiornato nel main', async () => {
+  const result = await sandbox({ env: { DRY_RUN: 'false' }, existing: true, details: { ...details, prices: { 20: 24 } },
+    response: (method, parameters, calls) => {
+      if (method === 'addInventoryProduct') return writeTimeout(method);
+      if (method === 'getInventoryProductsData' && calls.some(call => call.method === 'addInventoryProduct')) {
+        return successResponse({ products: { 60: details } });
+      }
+    },
+  });
+  assert.equal(result.exitCode, 0);
+  assert.ok(result.logs.some(line => line.includes('Aggiornati: 1')));
+  assert.ok(result.logs.some(line => line.includes('Esiti incerti: 0')));
+});
+
+test('CREATE rifiutata per rate limit: una richiesta, errore temporaneo ma non incerto', async () => {
+  const result = await sandbox({ entry: '../src/baseApi.js', env: { DRY_RUN: 'false' },
+    response: () => ({ ok: true, json: async () => ({ status: 'ERROR', error_code: 'ERROR_BLOCKED_TOKEN' }) }),
+    action: api => assert.rejects(api.sendProductToBase(normalizeProduct(source), config), error => error.temporary && !error.uncertain),
+  });
+  assert.equal(result.calls.length, 1);
+});
+
+test('Log retry e incertezza non espongono il token restituito in un errore', async () => {
+  const result = await sandbox({ env: { DRY_RUN: 'false' },
+    response: method => { if (method === 'addInventoryProduct') throw new Error('Errore con test-only-token'); },
+  });
+  assert.ok(result.logs.some(line => line.includes('[TOKEN NASCOSTO]')));
+  assert.ok(result.logs.every(line => !line.includes('test-only-token')));
+});
+
+
+test('Finestra mobile: prime 80 richieste a piena velocita con configurazione predefinita', async () => {
+  const result = await sandbox({ entry: '../src/baseApi.js', action: async api => {
+    for (let i = 0; i < 80; i++) await api.callBase('getInventories');
+  } });
+  assert.equal(result.calls.length, 80);
+  assert.ok(result.calls.every(call => call.at === 0));
+  assert.deepEqual(result.waits, []);
+});
+
+test('Finestra mobile: rallentamento progressivo dalla soglia soft', async () => {
+  const result = await sandbox({ entry: '../src/baseApi.js', action: async api => {
+    for (let i = 0; i < 83; i++) await api.callBase('getInventories');
+  } });
+  assert.deepEqual(result.waits, [67, 134, 200]);
+  assert.deepEqual(result.calls.slice(80).map(call => call.at), [67, 201, 401]);
+});
+
+test('Finestra mobile: limite 90 rispettato anche con 200 richieste concorrenti', async () => {
+  const result = await sandbox({ entry: '../src/baseApi.js', action: api =>
+    Promise.all(Array.from({ length: 200 }, () => api.callBase('getInventories'))),
+  });
+  assert.equal(result.calls.length, 200);
+  assert.equal(result.calls[90].at, 60000);
+  for (let index = 0; index < result.calls.length; index++) {
+    const now = result.calls[index].at;
+    const count = result.calls.slice(0, index + 1).filter(call => call.at > now - 60000).length;
+    assert.ok(count <= 90, `Superata soglia: ${count} a ${now}`);
+  }
+});
+
+const smallWindow = { BASE_API_WINDOW_MS: '1000', BASE_API_SAFE_LIMIT: '4', BASE_API_SOFT_LIMIT: '2' };
+
+test('Finestra mobile: hard limit attende la scadenza piu vecchia e libera posti', async () => {
+  const result = await sandbox({ entry: '../src/baseApi.js', env: smallWindow, action: async api => {
+    for (let i = 0; i < 5; i++) await api.callBase('getInventories');
+  } });
+  assert.deepEqual(result.calls.map(call => call.at), [0, 0, 125, 375, 1000]);
+  assert.deepEqual(result.waits, [125, 250, 625]);
+});
+
+test('Finestra mobile: inattivita svuota la finestra, senza nuova attesa', async () => {
+  const result = await sandbox({ entry: '../src/baseApi.js', env: smallWindow,
+    action: async (api, clock) => {
+      await api.callBase('getInventories');
+      clock.advance(200);
+      await api.callBase('getInventories');
+      clock.advance(1000);
+      await api.callBase('getInventories');
+      await api.callBase('getInventories');
+    },
+  });
+  assert.deepEqual(result.calls.map(call => call.at), [0, 200, 1200, 1200]);
+  assert.deepEqual(result.waits, []);
+});
+
+test('Finestra mobile: latenza naturale gia sufficiente non aggiunge delay', async () => {
+  const result = await sandbox({ entry: '../src/baseApi.js', env: smallWindow,
+    action: async (api, clock) => {
+      await api.callBase('getInventories');
+      await api.callBase('getInventories');
+      clock.advance(200);
+      await api.callBase('getInventories');
+    },
+  });
+  assert.deepEqual(result.calls.map(call => call.at), [0, 0, 200]);
+  assert.deepEqual(result.waits, []);
+});
+
+test('Finestra mobile: retry contati come vere richieste e soglia hard rispettata', async () => {
+  const result = await sandbox({ entry: '../src/baseApi.js',
+    env: { BASE_API_WINDOW_MS: '1000', BASE_API_SAFE_LIMIT: '1', BASE_API_SOFT_LIMIT: '0', BASE_API_RETRY_DELAY_MS: '10' },
+    response: (method, parameters, calls) => calls.length === 1 ? { ok: false, status: 503 } : undefined,
+    action: api => api.callBase('getInventories'),
+  });
+  assert.deepEqual(result.calls.map(call => call.at), [0, 1000]);
+});
+
+test('Finestra mobile: scritture e letture condividono lo stesso conteggio', async () => {
+  const result = await sandbox({ entry: '../src/baseApi.js', env: { ...smallWindow, DRY_RUN: 'false' },
+    action: async api => {
+      await api.callBase('getInventories');
+      await api.callBase('addInventoryCategory', { inventory_id: 10, name: 'Casa', parent_id: 0 });
+      await api.callBase('getInventoryPriceGroups');
+      await api.callBase('addInventoryManufacturer', { manufacturer_name: 'Marca' });
+      await api.callBase('getInventoryManufacturers');
+    },
+  });
+  assert.deepEqual(result.calls.map(call => call.at), [0, 0, 125, 375, 1000]);
+});
+
+test('Finestra mobile: DRY_RUN bloccato non occupa posti', async () => {
+  const result = await sandbox({ entry: '../src/baseApi.js', env: smallWindow,
+    action: async api => {
+      for (let i = 0; i < 5; i++) await assert.rejects(api.callBase('addInventoryProduct', {}), /bloccata/);
+      await api.callBase('getInventories');
+      await api.callBase('getInventoryPriceGroups');
+    },
+  });
+  assert.deepEqual(result.calls.map(call => call.at), [0, 0]);
+  assert.deepEqual(result.waits, []);
+});
+
+test('Finestra mobile: backoff reattivo prevale e pulisce i timestamp scaduti', async () => {
+  const result = await sandbox({ entry: '../src/baseApi.js',
+    env: { ...smallWindow, BASE_API_RATE_LIMIT_DELAY_MS: '100' },
+    response: (method, parameters, calls) => calls.length === 1
+      ? { ok: false, status: 429, headers: { get: () => '5' } } : undefined,
+    action: async api => {
+      await api.callBase('getInventories');
+      await api.callBase('getInventoryPriceGroups');
+    },
+  });
+  assert.deepEqual(result.calls.map(call => call.at), [0, 5000, 5000]);
+  assert.deepEqual(result.waits, [5000]);
+});
+
+for (const env of [
+  { BASE_API_WINDOW_MS: '0' },
+  { BASE_API_SAFE_LIMIT: '0' },
+  { BASE_API_SOFT_LIMIT: '90' },
+  { BASE_API_SOFT_LIMIT: '91' },
+]) {
+  test('Finestra mobile: configurazione incoerente bloccata ' + JSON.stringify(env), async () => {
+    const result = await sandbox({ entry: '../src/baseApi.js', env,
+      action: api => assert.rejects(api.callBase('getInventories'), /BASE_API_/),
+    });
+    assert.equal(result.calls.length, 0);
+  });
+}
